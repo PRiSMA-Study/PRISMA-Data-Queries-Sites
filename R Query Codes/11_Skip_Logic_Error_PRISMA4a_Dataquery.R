@@ -228,7 +228,7 @@ extract_variable_names <- function(temp_var) {
 }
 
 # Read your Excel file and preprocess the data
-dict <- read_excel("~/Analysis/Dictionary/PRISMA-MNH-Data-Dictionary-Repository-V.2.4-inprogress.xlsx",
+dict <- read_excel("~/Analysis/Dictionary/Data_Dictionary_Skip_Logic_v2.4",
                    sheet = "Data Dictionary") %>%
   select(Form, `Variable Name`, `Field Label (Question Text)`, 
          `Response Options`, `Value`, Filter, 
