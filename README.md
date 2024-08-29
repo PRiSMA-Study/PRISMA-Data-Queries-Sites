@@ -2,9 +2,9 @@
 ## Description
 This repository contains all PRISMA codes uploaded by GW team that will be shared and used by sites. We ask that each site please **create their own fork of this repository (tutorial at the end of this page)** and upload their code and output there. 
 
-#### :pushpin: *Updated on 23 April:* 
+#### :pushpin: *Updated on 29 August:* 
     - Updated duplicate ID and core variable checking codes in Stata. 
-    - Added updated data dictionary (v2.3 MAR272023)
+    - Added updated data dictionary (v2.5 MAY062024)
 
 ## Folder Structure
 **R Query Codes** 
