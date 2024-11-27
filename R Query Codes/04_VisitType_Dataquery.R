@@ -816,25 +816,38 @@ process_form <- function(form_name) {
       form_reordered <- form_cleaned %>%
         select(all_of(standard_names_v)) %>%
         mutate(
-          VISITDATE = ymd(parse_date_time(VISIT_OBSSTDAT, orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+          VISITDATE = case_when(
+            # Check if the first part of the date seems to be the day
+            grepl("^([0-2][0-9]|3[0-1])/([0-1][0-9])/", VISIT_OBSSTDAT) ~ dmy(VISIT_OBSSTDAT),
+            # Check if the first part of the date seems to be the month
+            grepl("^([0-1][0-9])/([0-2][0-9]|3[0-1])/", VISIT_OBSSTDAT) ~ mdy(VISIT_OBSSTDAT),
+            # Default to parsing with common formats
+            TRUE ~ ymd(parse_date_time(VISIT_OBSSTDAT, orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))
+          ),
           VISITDATE = replace(VISITDATE, VISITDATE %in% c(ymd("1907-07-07"), ymd("1905-05-05"), ymd("2007-07-07")), NA),
-          FORM_COMP = 1
+          FORM_COMP = 1,
+          REPORTED_DATE = VISIT_OBSSTDAT
         )
     } else if ("DATE.TODAY" %in% colnames(form_cleaned)) {
       form_reordered <- form_cleaned %>%
         select(all_of(standard_names_d)) %>%
         mutate(
-          VISITDATE = ymd(parse_date_time(DATE.TODAY, orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+          VISITDATE = case_when(
+            # Check if the first part of the date seems to be the day
+            grepl("^([0-2][0-9]|3[0-1])/([0-1][0-9])/", DATE.TODAY) ~ dmy(DATE.TODAY),
+            # Check if the first part of the date seems to be the month
+            grepl("^([0-1][0-9])/([0-2][0-9]|3[0-1])/", DATE.TODAY) ~ mdy(DATE.TODAY),
+            # Default to parsing with common formats
+            TRUE ~ ymd(parse_date_time(DATE.TODAY, orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))
+          ),
           VISITDATE = replace(VISITDATE, VISITDATE %in% c(ymd("1907-07-07"), ymd("1905-05-05"), ymd("2007-07-07")), NA),
-          FORM_COMP = 1
+          FORM_COMP = 1,
+          REPORTED_DATE = DATE.TODAY
         )
     } else {
-      
       print(paste("No Visit Date in", form_name, "so skip to next form"))
-      
       return(NULL)
     }
-    
     # Perform the left join with INFANT_DOB by MOMID, PREGID, INFANTID
     form_prep <- form_reordered %>%
       left_join(Infant_DOB, by = c("MOMID", "PREGID", "INFANTID")) %>%
@@ -889,9 +902,9 @@ process_form <- function(form_name) {
         select(SCRNID, MOMID, PREGID, INFANTID, TYPE_VISIT, VISITDATE, FORM, VARIABLENAME, VARIABLEVALUE, FIELD_TYPE, EDIT_TYPE)
       
       extra <- form_query %>%
-        select(FORM, MOMID, PREGID, INFANTID, VISITDATE, DOB_Date, AGE_IN_DAYS, AGE_IN_WEEKS, Visit_Window, TYPE_VISIT, TYPE_VISIT_CONS, Error_message)
+        select(FORM, MOMID, PREGID, INFANTID, REPORTED_DATE, VISITDATE, DOB_Date, AGE_IN_DAYS, AGE_IN_WEEKS, Visit_Window, TYPE_VISIT, TYPE_VISIT_CONS, Error_message)
       
-      names(extra) <- c("Form", "MomID", "PregID", "InfantID", "VisitDate", "DOB", "Age (Days)", "Age (Weeks)", "Expected Window", "Reported Visit Type", "Expected Visit Type", "Error Message")
+      names(extra) <- c("Form", "MomID", "PregID", "InfantID", "Reported Date" , "VisitDate", "DOB", "Age (Days)", "Age (Weeks)", "Expected Window", "Reported Visit Type", "Expected Visit Type", "Error Message")
       
       names(output) <- c("ScrnID", "MomID", "PregID", "InfantID", "VisitType", "VisitDate", "Form", "Variable Name", "Variable Value", "FieldType", "EditType")
       
