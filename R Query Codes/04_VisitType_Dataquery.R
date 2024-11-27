@@ -854,7 +854,7 @@ process_form <- function(form_name) {
       mutate(
         DOB_Date = as.Date(trunc(DOB, 'days')),
         AGE_IN_DAYS = round(as.numeric(difftime(VISITDATE, DOB_Date, units = "days")), 0),
-        AGE_IN_WEEKS = floor(AGE_IN_DAYS / 7),
+        AGE_IN_WEEKS = AGE_IN_DAYS %/% 7,
         TYPE_VISIT_CONS = case_when(
           AGE_IN_DAYS >= 182 & AGE_IN_DAYS <= 363 ~ 11,
           AGE_IN_DAYS >= 364 & AGE_IN_DAYS <= 426 ~ 12,
