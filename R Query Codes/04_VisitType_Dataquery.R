@@ -684,3 +684,275 @@ if (dim(visit_type_query_extra_tab)[1] >0){
   
 }
 
+#*****************************************************************************
+## Additional GSED Query: 
+#1. To determine if age of assessment correlates with TYPE_VISIT variable
+#2. To identify missing TYPE_VISIT variables 
+#*****************************************************************************
+if (exists("mnh09") == TRUE){
+  
+  mnh09_dob <- mnh09 %>%
+    select(MOMID, PREGID, INFANTID_INF1, INFANTID_INF2, INFANTID_INF3, INFANTID_INF4, DELIV_DSSTDAT_INF1,
+           DELIV_DSSTDAT_INF2, DELIV_DSSTDAT_INF3, DELIV_DSSTDAT_INF4,DELIV_DSSTTIM_INF1, DELIV_DSSTTIM_INF2, 
+           DELIV_DSSTTIM_INF3, DELIV_DSSTTIM_INF4, BIRTH_DSTERM_INF1,BIRTH_DSTERM_INF2, BIRTH_DSTERM_INF3,
+           BIRTH_DSTERM_INF4, SEX_INF1, SEX_INF2, SEX_INF3, SEX_INF4) %>% 
+    mutate(SEX_INF1 = as.numeric(SEX_INF1), SEX_INF2 = as.numeric(SEX_INF2), SEX_INF3 = as.numeric(SEX_INF3), SEX_INF4 = as.numeric(SEX_INF4)) %>%    # Date parsing and conversion
+    mutate(across(c(DELIV_DSSTDAT_INF1:DELIV_DSSTDAT_INF4), 
+                  ~ ymd(parse_date_time(.x, c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))))) %>%
+    
+    # Replace default dates and times with NA
+    mutate(across(starts_with("DELIV_DSSTDAT_INF"), 
+                  ~ replace(.x, .x %in% c(ymd("1907-07-07"), ymd("2007-07-07")), NA)),
+           across(starts_with("DELIV_DSSTTIM_INF"), 
+                  ~ replace(.x, .x == "77:77", NA))) %>%
+    
+    # Time conversion
+    mutate(across(starts_with("DELIV_DSSTTIM_INF"), ~ if_else(!is.na(.x), as.ITime(.x), NA))) %>%
+    # Concatenate date and time into datetime
+    mutate(DELIVERY_DATETIME_INF1 = if_else(!is.na(DELIV_DSSTDAT_INF1) & !is.na(DELIV_DSSTTIM_INF1),
+                                            as.POSIXct(paste(DELIV_DSSTDAT_INF1, DELIV_DSSTTIM_INF1), format = "%Y-%m-%d %H:%M:%S"), 
+                                            NA),
+           DELIVERY_DATETIME_INF2 = if_else(!is.na(DELIV_DSSTDAT_INF2) & !is.na(DELIV_DSSTTIM_INF2),
+                                            as.POSIXct(paste(DELIV_DSSTDAT_INF2, DELIV_DSSTTIM_INF2), format = "%Y-%m-%d %H:%M:%S"), 
+                                            NA),
+           DELIVERY_DATETIME_INF3 = if_else(!is.na(DELIV_DSSTDAT_INF3) & !is.na(DELIV_DSSTTIM_INF3),
+                                            as.POSIXct(paste(DELIV_DSSTDAT_INF3, DELIV_DSSTTIM_INF3), format = "%Y-%m-%d %H:%M:%S"), 
+                                            NA),
+           DELIVERY_DATETIME_INF4 = if_else(!is.na(DELIV_DSSTDAT_INF4) & !is.na(DELIV_DSSTTIM_INF4),
+                                            as.POSIXct(paste(DELIV_DSSTDAT_INF4, DELIV_DSSTTIM_INF4), format = "%Y-%m-%d %H:%M:%S"), 
+                                            NA))
+  
+  # Getting the Date of Birth, Sex and Birth Outcome for Each ID
+  Infant_DOB <- mnh09_dob %>%
+    # Pivot the data from wide to long format
+    pivot_longer(
+      # Select columns to pivot (INFANTID_INF1-4 and DELIVERY_DATETIME_INF1-4)
+      cols = c(
+        INFANTID_INF1, INFANTID_INF2, INFANTID_INF3, INFANTID_INF4,
+        DELIVERY_DATETIME_INF1, DELIVERY_DATETIME_INF2, DELIVERY_DATETIME_INF3, DELIVERY_DATETIME_INF4, BIRTH_DSTERM_INF1,
+        BIRTH_DSTERM_INF2, BIRTH_DSTERM_INF3, BIRTH_DSTERM_INF4,SEX_INF1, SEX_INF2, SEX_INF3, SEX_INF4),
+      # Specify how to separate column names: extract suffixes and values
+      names_to = c(".value", "infant_suffix"),
+      # Define the pattern: splitting by "_INF" and matching the suffix
+      names_pattern = "(.*)_INF(\\d)$"
+    ) %>%
+    # Rename the columns
+    rename(
+      INFANTID = INFANTID,
+      DOB = DELIVERY_DATETIME
+    ) %>%
+    # Drop the suffix column since it was used for reshaping
+    select(MOMID, PREGID, INFANTID, DOB, BIRTH_DSTERM, SEX )  %>%
+    # Filter out rows where INFANTID is NA
+    filter(INFANTID != "") %>% 
+    mutate (MNH09_COMP = 1)
+  
+} else { 
+  print(paste0("No MNH09 uploaded ", site))
+  stop("Process stopped due to missing delivery form.")
+}
+
+if (exists("mnh08") == TRUE){
+  
+ remapp_ids <- mnh08 %>% filter (LB_REMAPP3 == 1 | BLEAD_LBPERF_1 == 1 | SCHISTO_LBPERF_1 == 1 |
+                                 SCHISTO_LBPERF_STOOL == 1 | HELM_LBPERF_1 == 1 | BLD_MORPH_LBPERF_1 == 1 |
+                                 BLD_MORPH_LBPERF_2 == 1 | BLD_MORPH_LBPERF_3 == 1| BLD_MORPH_LBPERF_4 == 1 ) %>% 
+                         select (MOMID, PREGID) %>% 
+                         distinct()
+   
+}
+
+#Function to rename variables
+# List of standard variable names to ensure are present and to move to the front
+standard_names <- c("MOMID", "PREGID", "INFANTID", "TYPE_VISIT", "VISIT_OBSSTDAT", "DATE.TODAY")
+standard_names_v <- c("MOMID", "PREGID", "INFANTID", "TYPE_VISIT", "VISIT_OBSSTDAT")
+standard_names_d <- c("MOMID", "PREGID", "INFANTID", "TYPE_VISIT", "DATE.TODAY")
+
+
+
+# A helper function to find and rename similar variable names
+rename_similar_vars <- function(df, standard_names) {
+  
+  # Get current variable names in the dataset
+  current_names <- names(df)
+  
+  # Loop through each standard variable name
+  for (standard_name in standard_names) {
+    
+    # Find any current names that are similar to the standard name (based on string similarity)
+    similar_name <- current_names[str_detect(current_names, regex(standard_name, ignore_case = TRUE))]
+    
+    # If a similar name is found but it's not exactly the standard name, rename it
+    if (length(similar_name) == 1 && similar_name != standard_name) {
+      df <- df %>%
+        rename(!!standard_name := all_of(similar_name))
+      message(paste("Renamed", similar_name, "to", standard_name))
+    }
+  }
+  
+  return(df)
+}
+
+# GSED Short Form 
+
+# List of forms to process
+form_list <- list("mnh30", "mnh31", "mnh32")
+output_list <- list()
+extra_list <- list()
+
+# Function to process each form
+process_form <- function(form_name) {
+  if (exists(form_name)) {
+    form_data <- get(form_name)
+    
+    # Capitalize variable names
+    names(form_data) <- toupper(names(form_data))
+    
+    # Apply the function to clean and standardize variable names
+    form_cleaned <- rename_similar_vars(form_data, standard_names)
+    
+    # Check for visit date columns and create VISITDATE
+    if ("VISIT_OBSSTDAT" %in% colnames(form_cleaned)) {
+      form_reordered <- form_cleaned %>%
+        select(all_of(standard_names_v)) %>%
+        mutate(
+          VISITDATE = case_when(
+            # Check if the first part of the date seems to be the day
+            grepl("^([0-2][0-9]|3[0-1])/([0-1][0-9])/", VISIT_OBSSTDAT) ~ dmy(VISIT_OBSSTDAT),
+            # Check if the first part of the date seems to be the month
+            grepl("^([0-1][0-9])/([0-2][0-9]|3[0-1])/", VISIT_OBSSTDAT) ~ mdy(VISIT_OBSSTDAT),
+            # Default to parsing with common formats
+            TRUE ~ ymd(parse_date_time(VISIT_OBSSTDAT, orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))
+          ),
+          VISITDATE = replace(VISITDATE, VISITDATE %in% c(ymd("1907-07-07"), ymd("1905-05-05"), ymd("2007-07-07")), NA),
+          FORM_COMP = 1,
+          REPORTED_DATE = VISIT_OBSSTDAT
+        )
+    } else if ("DATE.TODAY" %in% colnames(form_cleaned)) {
+      form_reordered <- form_cleaned %>%
+        select(all_of(standard_names_d)) %>%
+        mutate(
+          VISITDATE = case_when(
+            # Check if the first part of the date seems to be the day
+            grepl("^([0-2][0-9]|3[0-1])/([0-1][0-9])/", DATE.TODAY) ~ dmy(DATE.TODAY),
+            # Check if the first part of the date seems to be the month
+            grepl("^([0-1][0-9])/([0-2][0-9]|3[0-1])/", DATE.TODAY) ~ mdy(DATE.TODAY),
+            # Default to parsing with common formats
+            TRUE ~ ymd(parse_date_time(DATE.TODAY, orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))
+          ),
+          VISITDATE = replace(VISITDATE, VISITDATE %in% c(ymd("1907-07-07"), ymd("1905-05-05"), ymd("2007-07-07")), NA),
+          FORM_COMP = 1,
+          REPORTED_DATE = DATE.TODAY
+        )
+    } else {
+      print(paste("No Visit Date in", form_name, "so skip to next form"))
+      return(NULL)
+    }
+    # Perform the left join with INFANT_DOB by MOMID, PREGID, INFANTID
+    form_prep <- form_reordered %>%
+      left_join(Infant_DOB, by = c("MOMID", "PREGID", "INFANTID")) %>%
+      mutate(
+        DOB_Date = as.Date(trunc(DOB, 'days')),
+        AGE_IN_DAYS = round(as.numeric(difftime(VISITDATE, DOB_Date, units = "days")), 0),
+        AGE_IN_WEEKS = AGE_IN_DAYS %/% 7,
+        TYPE_VISIT_CONS = case_when(
+          AGE_IN_DAYS >= 182 & AGE_IN_DAYS <= 363 ~ 11,
+          AGE_IN_DAYS >= 364 & AGE_IN_DAYS <= 426 ~ 12,
+          AGE_IN_DAYS >= 91 & AGE_IN_DAYS <= 181 ~ 14,
+          TRUE ~ NA
+        ),
+        Visit_Window = case_when(
+          AGE_IN_DAYS >= 364 & AGE_IN_DAYS <= 426 ~ "On-Time: 52 to 54 wks; Late: 55 to <61 wks",
+          AGE_IN_DAYS >= 182 & AGE_IN_DAYS <= 363 ~ "On-Time: 26 to 28 wks; Late: 29 to <52 wks",
+          AGE_IN_DAYS >= 91 & AGE_IN_DAYS <= 181 ~ "On-Time: 13 to 15 wks; Late: 16 to <26 wks",
+          AGE_IN_DAYS < 0 | is.na(VISITDATE) ~ "Visit date error",
+          TRUE ~ "Not expected: protocol deviation"
+        )
+      )
+    
+    # Filter non-queries
+    form_out <- form_prep %>%
+      filter((!is.na(DOB) & TYPE_VISIT != TYPE_VISIT_CONS) | is.na(VISITDATE) | is.na(TYPE_VISIT))
+    
+    if (nrow(form_out) > 0) {
+      form_query <- form_out %>%
+        mutate(
+          Error_message = case_when(
+            is.na(VISITDATE) ~ "visit date is missing",
+            AGE_IN_DAYS < 0 ~ "infant age is less than 0",
+            AGE_IN_DAYS < 91 & TYPE_VISIT_CONS == 14 ~ "three-month visit (VisitType 14) completed early",
+            TYPE_VISIT_CONS == 14 & TYPE_VISIT != 14 ~ "three-month visit (VisitType 14) expected",
+            TYPE_VISIT_CONS == 11 & TYPE_VISIT != 11 ~ "six-month visit (VisitType 11) expected",
+            TYPE_VISIT_CONS == 12 & TYPE_VISIT != 12 ~ "twelve-month visit (VisitType 12) expected",
+            AGE_IN_DAYS > 426 ~ "twelve-month (VisitType 12) visit completed late",
+            is.na(TYPE_VISIT) ~ "visit type is missing",
+            TRUE ~ "visit type error"
+          )
+        ) %>%
+        mutate(
+          SCRNID = NA,
+          FORM = toupper(form_name),
+          VARIABLENAME = "TYPE_VISIT",
+          VARIABLEVALUE = TYPE_VISIT,
+          FIELD_TYPE = "Number",
+          EDIT_TYPE = "GSED Visit Type Error"
+        )
+      
+      output <- form_query %>%
+        select(SCRNID, MOMID, PREGID, INFANTID, TYPE_VISIT, VISITDATE, FORM, VARIABLENAME, VARIABLEVALUE, FIELD_TYPE, EDIT_TYPE)
+      
+      extra <- form_query %>%
+        select(FORM, MOMID, PREGID, INFANTID, REPORTED_DATE, VISITDATE, DOB_Date, AGE_IN_DAYS, AGE_IN_WEEKS, Visit_Window, TYPE_VISIT, TYPE_VISIT_CONS, Error_message)
+      
+      names(extra) <- c("Form", "MomID", "PregID", "InfantID", "Reported Date" , "VisitDate", "DOB", "Age (Days)", "Age (Weeks)", "Expected Window", "Reported Visit Type", "Expected Visit Type", "Error Message")
+      
+      names(output) <- c("ScrnID", "MomID", "PregID", "InfantID", "VisitType", "VisitDate", "Form", "Variable Name", "Variable Value", "FieldType", "EditType")
+      
+      return(list(output = output, extra = extra))
+    } else {
+      print(paste(form_name, "query not uploaded"))
+      return(NULL)
+    }
+  } else {
+    print(paste(form_name, "form not uploaded"))
+    return(NULL)
+  }
+}
+
+# Process all forms
+for (form in form_list) {
+  result <- process_form(form)
+  if (!is.null(result)) {
+    output_list[[form]] <- result$output
+    extra_list[[form]] <- result$extra
+  }
+}
+
+# Combine all outputs and extras
+GSED_visit_query_output <- bind_rows(output_list)
+GSED_visit_query_extra <- bind_rows(extra_list)
+
+if (exists("GSED_visit_query_output") == TRUE) {
+  
+  ## add additional columns 
+  GSED_visit_query_output_to_export = cbind(QueryID = NA, 
+                                      UploadDate = UploadDate, 
+                                      GSED_visit_query_output, 
+                                      DateEditReported = format(Sys.time(), "%Y-%m-%d"))
+  
+  # combine form/edit type var 
+  GSED_visit_query_output_to_export$Form_Edit_Type <- paste(GSED_visit_query_output_to_export$Form,"_",GSED_visit_query_output_to_export$EditType)
+  
+  ## assign queryid -- edit type id for invalid visit types is 06 
+  GSED_visit_query_output_to_export <- GSED_visit_query_output_to_export %>% 
+    mutate(QueryID = paste0(Form, "_", VisitDate, "_",MomID, "_",`Variable Name`, "_", `Variable Value`, "_", "06"))
+  
+  GSED_visit_query <- GSED_visit_query_output_to_export
+  ## export variable checking query 
+  save(GSED_visit_query, file = paste0(maindir,"/GSEDVisitType_query.rda"))
+  save(GSED_visit_query_extra, file = paste0(maindir,"/GSEDVisitType_query_extra.rda"))
+  
+} else { 
+  print(paste0("No GSED Query for ", site))
+  stop("Process stopped due to missing GSED Query.")
+}
