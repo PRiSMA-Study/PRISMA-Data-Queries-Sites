@@ -1,19 +1,30 @@
 #*****************************************************************************
-#*QUERY #5 -- CONFIRM ALL "ENROLLED" PARTICIPANTS MEET OUR ENROLLMENT ELIGIBILITY CRITERIA
+#*QUERY #5 -- 
 # 1. CONFIRM ALL "ENROLLED" PARTICIPANTS MEET PRISMA ENROLLMENT ELIGIBILITY CRITERIA
 # 2. CONFIRM ALL PARTICIPANTS WHO ARE NOT ELIGIBLE BY PRESCREENING CRITERIA HAVE AN EXCLUSION CRITERIA
 # 3. CONFIRM ALL PARTICPANTS WHO HAVE PASSED THE IPC WINDOW HAVE A REPORTED BIRTH OUTCOME
-
-#* Written by: Stacie Loisate 
-#* Last updated: 04 April 2024
 
 #*Input: Wide data (all raw .csv files) & Long data
 #*Function: Confirm all enrolled particpants meet our enrollment criteria as in MNH02
 #*Output: .rda file with all MOMIDs that do not meet enrollment criteria 
 #*****************************************************************************
+#* Items to Update before running script 
+#* You can copy and paste "UPDATE EACH RUN" to find where to update 
+#* Last updated: 13 Feb 2025 
+#* 
+#* Changes to the eligibility reason query
+#* Changes the variable for MOMID missing enrolment form to PREGID
+#* Included consent variable in the ineligibility criteria
+#* SCRN_RETURN removal for Ghana
+
+#* 1. Update "UploadDate" 
+#* 2. Set "site" variable to the site you are running the query for
+
+#* Once the previous lines of code are updated, you can start to run the script 
 #*****************************************************************************
-#* Data setup 
-#*****************************************************************************
+
+# clear environment 
+rm(list = ls())
 
 # load packages 
 library(tidyverse)
@@ -24,30 +35,33 @@ library(dplyr)
 library(data.table)
 library(lubridate)
 
-# UPDATE EACH RUN: Update "UploadDate" (this should match the folder name in synapse)
-UploadDate = "2023-08-25"
+## UPDATE EACH RUN ## 
+# 1. Update "UploadDate" (this should match the folder name in synapse)
+# 2. Set "site" variable to the site you are running the query for 
+UploadDate = "2025-02-07"
+site = "Pakistan"
 
-# UPDATE EACH RUN: Set "site" variable to the site you are running the query for 
-site = "Kenya"
+# 3. Set your main directory 
+maindir <- paste0("~/PRiSMAv2Data/", site,"/", UploadDate, sep = "")
+#*****************************************************************************
+#* load data
+#*****************************************************************************
+## Load in long data 
+load(paste0("~/PRiSMAv2Data/", site, "/", UploadDate,"/data/", UploadDate, "_long.Rdata", sep = "")) 
 
-# UPDATE EACH RUN: load in the WIDE data we generated from 00_DataImport code 
-load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_wide.Rdata", sep = "")) 
-
-# UPDATE EACH RUN: load in the LONG data we generated from 00_DataImport code 
-load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = "")) 
-
-## UPDATE EACH RUN: set path to location where you want to save the query output below 
-path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries/"
-
+## Load in wide data 
+load(paste0("~/PRiSMAv2Data/", site, "/", UploadDate,"/data/", UploadDate, "_wide.Rdata", sep = "")) 
+#*****************************************************************************
 ####################################################################################################
 # 1. CONFIRM ALL "ENROLLED" PARTICIPANTS MEET PRISMA ENROLLMENT ELIGIBILITY CRITERIA
 ####################################################################################################
 
 ## extract MOMIDs in all forms following MNH02. We will assume that any participant with these forms are considered "enrolled" by sites 
-all_momid <- data_long %>% filter(form != "MNH02" & form != "MNH00" & form != "MNH01") %>% distinct(MOMID) %>% pull(MOMID)
+## PJW Edits - Changing MOMID to PREGID - to account for reenrolled moms 
+all_momid <- data_long %>% filter(form != "MNH02" & form != "MNH00" & form != "MNH01") %>% distinct(PREGID) %>% pull(PREGID)
 
 ## subset all MOMIDs that have forms 03-25 from MNH02 (enrollment form)
-momid_enroll_forms <- mnh02 %>% filter(MOMID %in% all_momid)
+momid_enroll_forms <- mnh02 %>% filter(PREGID %in% all_momid)
 
 ## Among these women who the sites are considering "enrolled", do they meet our enrollment criteria?
 # 1, Yes meets enrollment criteria 
@@ -100,33 +114,44 @@ if (dim(MomidNotEligible)[1] >= 1){
   save(MomidNotEligible_query, file = paste0(maindir,"/queries/MomidNotEligible_query.rda"))
   
 }
+
 ####################################################################################################
 # 2. CONFIRM ALL PARTICIPANTS WHO ARE NOT ELIGIBLE BY PRESCREENING CRITERIA HAVE AN EXCLUSION CRITERIA
 ####################################################################################################
 
 # Filter ineligible cases
-Mom_ineligible <- mnh00 %>%
-  filter(!(PREGNANT_IEORRES == 1 & EGA_LT25_IEORRES == 1 & AGE_IEORRES == 1 & CATCHMENT_IEORRES == 1 & OTHR_IEORRES == 0))
+if (site == "Pakistan") {
+  Mom_ineligible <- mnh00 %>%
+    filter(!(PREGNANT_IEORRES == 1 & EGA_LT25_IEORRES==77 & AGE_IEORRES == 1 & CATCHMENT_IEORRES == 1 & OTHR_IEORRES %in% c(0,77) & CON_YN_DSDECOD == 1))
+  
+} else {
+  Mom_ineligible <- mnh00 %>%
+    filter(!(PREGNANT_IEORRES == 1 & EGA_LT25_IEORRES == 1 & AGE_IEORRES == 1 & CATCHMENT_IEORRES == 1 & OTHR_IEORRES == 0 & CON_YN_DSDECOD == 1))
+}
 
-# Further filter ineligible cases with specified "Other Reasons"
+
+# Further filter ineligible cases with specified "Other Reasons" and cases where consent is not given
 Mom_ineligible_filtered <- Mom_ineligible %>% 
-  filter(!(OTHR_IEORRES == 1))
-
+  filter(!(OTHR_IEORRES == 1 & OTHR_REASON_IEORRES %in% c(1:8, 88))) %>% #filter where there were other reasons why we shoudl exclude
+  filter (!(CON_YN_DSDECOD == 0)) %>% #filter out of the df where woman didn't consent
+#Further filter where an ineligibility criteria was provided
+  filter (!(PREGNANT_IEORRES == 0 | EGA_LT25_IEORRES == 0 | AGE_IEORRES == 0 | CATCHMENT_IEORRES == 0)) %>%
+  select (SCRNID, SCRN_OBSSTDAT, PREGNANT_IEORRES, EGA_LT25_IEORRES, AGE_IEORRES, CATCHMENT_IEORRES, CON_YN_DSDECOD ,OTHR_IEORRES, OTHR_REASON_IEORRES)
 
 # Extract eligibility reasons
-EligibilityReason <- Mom_ineligible %>% 
+EligibilityReason <- Mom_ineligible_filtered %>% 
   mutate(
     
     Form = "MNH00",
-    
     EditType = case_when(
-      PREGNANT_IEORRES %in% c(1, 77) & EGA_LT25_IEORRES %in% c(1, 77) & AGE_IEORRES %in% c(1, 77) & CATCHMENT_IEORRES %in% c(1, 77) & OTHR_IEORRES != 1 ~ "Provide Ineligibility Criteria",
+      (PREGNANT_IEORRES == 77 | EGA_LT25_IEORRES == 77 | AGE_IEORRES == 77 |  CATCHMENT_IEORRES == 77 ) & OTHR_IEORRES %in% c(0,77) ~ "Provide Ineligibility Criteria",
       (PREGNANT_IEORRES == 0 | EGA_LT25_IEORRES == 0 | AGE_IEORRES == 0 | CATCHMENT_IEORRES == 0) & OTHR_IEORRES == 1 & OTHR_REASON_IEORRES == 77 ~ "Ineligibility Skip Pattern Error",
       PREGNANT_IEORRES %in% c(1, 77) & EGA_LT25_IEORRES %in% c(1, 77) & AGE_IEORRES %in% c(1, 77) & CATCHMENT_IEORRES %in% c(1, 77) & OTHR_IEORRES == 1 & OTHR_REASON_IEORRES == 77 ~ "Specify Other Reason", 
+      (PREGNANT_IEORRES == 1 & EGA_LT25_IEORRES == 1 & AGE_IEORRES == 1 & CATCHMENT_IEORRES == 1 & OTHR_IEORRES == 0) & CON_YN_DSDECOD %in% c(77, 55, 66, 99) ~ "Provide consent confirmation",
       TRUE ~ "No Error"),
     Form_Edit_Type = paste(Form, "_", EditType)) %>% 
   
-  select(SCRNID, SCRN_OBSSTDAT, EditType, Form_Edit_Type, PREGNANT_IEORRES, EGA_LT25_IEORRES, AGE_IEORRES, CATCHMENT_IEORRES, OTHR_IEORRES, OTHR_REASON_IEORRES) %>% 
+  select(SCRNID, SCRN_OBSSTDAT, EditType, Form_Edit_Type, PREGNANT_IEORRES, EGA_LT25_IEORRES, AGE_IEORRES, CATCHMENT_IEORRES, CON_YN_DSDECOD , OTHR_IEORRES, OTHR_REASON_IEORRES) %>% 
   
   filter(!(EditType == "No Error"))
 
@@ -159,6 +184,17 @@ if (dim(EligibilityReason)[1] >= 1){
   save(Comment, file = paste0(maindir,"/queries/InEligibilityCriteria_comments.rda"))
 }
 
+# library(openxlsx)
+# 
+# file_path <- paste0(maindir,"/queries/", site,"_", "InEligibilityCriteria_query.xlsx") 
+# 
+# # Write the dataframe to an Excel file
+# write.xlsx(EligibilityReason, file_path)
+# 
+# # Confirm that the file has been saved
+# print (paste("Excel file saved to:", file_path))
+
+
 
 ####################################################################################################
 # 3. CONFIRM ALL PARTICPANTS WHO HAVE PASSED THE IPC WINDOW HAVE A REPORTED BIRTH OUTCOME
@@ -168,13 +204,12 @@ if (dim(EligibilityReason)[1] >= 1){
 ####################################################################################################
 
 # pull all enrolled participants -- some sites reporting mnh01 for all screened but not enrolled participants
-## only enrolled participants will be expected to have a birth outcome
+## only enrolled particpants will be expected to have a birth outcome
 
-if ("SCRN_RETURN" %in% names(mnh02)) {
+if ("SCRN_RETURN" %in% names(mnh02) & site != "Ghana") {
   
   enrolled_ids <- mnh02 %>% 
-    mutate(ENROLL = ifelse(SCRN_RETURN ==1 & 
-                             AGE_IEORRES == 1 & 
+    mutate(ENROLL = ifelse(AGE_IEORRES == 1 & 
                              PC_IEORRES == 1 & 
                              CATCHMENT_IEORRES == 1 & 
                              CATCH_REMAIN_IEORRES == 1 & 
