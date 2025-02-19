@@ -1225,6 +1225,57 @@ if (exists("mnh26")==TRUE){
   }
 }
 
+#****************************************
+#* For MNH30, 31, 32 and 36
+#****************************************
+datasets <- c("mnh31", "mnh32", "mnh30", "mnh36")
+
+# Define the function to find duplicates
+dup_MOM_PREG_TV <- function(form) {
+  ID <- form %>% 
+    select(MOMID, PREGID, INFANTID, TYPE_VISIT)
+  dup <- form[duplicated(ID) | duplicated(ID, fromLast = TRUE),] %>% 
+    arrange(MOMID, PREGID, INFANTID, TYPE_VISIT) 
+  dupID <- print(dup, n=nrow(dup), na.print=NULL)
+  return(dup)
+}
+
+# Loop through each dataset
+for (dataset_name in datasets) {
+  if (exists(dataset_name)) {
+    # Get the dataset
+    form <- get(dataset_name)
+    
+    # Find duplicates
+    id_dup <- dup_MOM_PREG_TV(form)
+    
+    # Export key variables if duplicates exist
+    id_dup <- id_dup %>% select(MOMID, PREGID, INFANTID, TYPE_VISIT, VISIT_OBSSTDAT)
+    
+    # Add SCRNID column if duplicates exist
+    if (nrow(id_dup) > 0) {
+      id_dup <- cbind(SCRNID = "NA", id_dup)
+    }
+    
+    # Rename columns if duplicates exist
+    if (nrow(id_dup) > 0) {
+      names(id_dup) <- c("SCRNID", "MOMID", "PREGID", "INFANTID", "VisitType", "VisitDate")
+    }
+    
+    # Add form column
+    id_dup <- add_column(id_dup, Form = toupper(dataset_name))
+    
+    # Only need to include 1 instance of the duplicate
+    id_dup <- id_dup %>% unique()
+    
+    # Bind with other forms
+    if (nrow(id_dup) > 0) {
+      VarNamesDuplicate_Inf <- rbind(VarNamesDuplicate_Inf, id_dup)
+    }
+  }
+}
+
+
 # #****************************************
 # #* ADJUST FOR VISIT TYPE = 13
 # #****************************************
@@ -1312,7 +1363,7 @@ duplicates_query <- VarNamesDuplicate
 
 
 ## REMOVE VISIT TYPE = 13 or 14 
-duplicates_query <- duplicates_query %>% filter(!VisitType %in% c(13,14))
+duplicates_query <- duplicates_query %>% filter(!VisitType %in% c(13,14) & !(Form %in% c("MNH30", "MNH31", "MNH32")))
 
 #export
 save(duplicates_query, file = paste0(maindir,"/queries/duplicates_query"))
