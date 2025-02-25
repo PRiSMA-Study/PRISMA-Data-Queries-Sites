@@ -1,7 +1,7 @@
 #*****************************************************************************
 #*QUERY #2 -- CHECK FOR DUPLICATE IDs
 #* Written by: Stacie Loisate & Xiaoyan Hu
-#* Last updated: 26 February 2024
+#* Last updated: 22 February 2025
 
 #*Input: Wide data (all raw .csv files) & Long data 
 #*Functions: 
@@ -151,7 +151,7 @@ if (exists("mnh01")==TRUE){
   out_us <- dup_US(mnh01)
   
   # export key variables if duplicates exists 
-  out_us <- out_us %>% select(SCRNID,MOMID, PREGID, TYPE_VISIT, US_OHOSTDAT)
+  out_us <- out_us %>% select(SCRNID, MOMID, PREGID, TYPE_VISIT, US_OHOSTDAT)
   # out_us <- out_us %>% select(SCRNID,MOMID, PREGID, TYPE_VISIT)
   # out_us <- add_column(out_us,FORMCOMPLDAT_MNH01 =NA)
   
@@ -1225,6 +1225,8 @@ if (exists("mnh26")==TRUE){
   }
 }
 
+
+
 #****************************************
 #* For MNH30, 31, 32 and 36
 #****************************************
@@ -1309,6 +1311,7 @@ for (dataset_name in datasets) {
 #****************************************
 # 08/04 UPDATE: THERE ARE INSTANCES OF MISSING INFANTIDS IN INFANT FORMS -- ADD NEW ERROR TYPE HERE 
 # add infant id column to momid dataframe 
+
 names(VarNamesDuplicate) = c("SCRNID","MOMID", "PREGID","VisitType", "VisitDate", "Form")
 VarNamesDuplicate <- add_column(VarNamesDuplicate, INFANTID = NA, .after = "PREGID")
 
@@ -1361,36 +1364,65 @@ VarNamesDuplicate <- VarNamesDuplicate %>%
 
 duplicates_query <- VarNamesDuplicate
 
-
 ## REMOVE VISIT TYPE = 13 or 14 
 duplicates_query <- duplicates_query %>% filter(!VisitType %in% c(13,14) & !(Form %in% c("MNH30", "MNH31", "MNH32")))
 
 #export
-save(duplicates_query, file = paste0(maindir,"/queries/duplicates_query"))
+save(duplicates_query, file = paste0(path_to_save,"/duplicates_query.rda"))
 
 #*****************************************************************************
 #* comparing mom id 
 #* This code will check that all moms who are enrolled had an enrollment form 
 #*****************************************************************************
 ## Load in long data  
-load(paste0("~/PRiSMAv2Data/", Site, "/", UploadDate,"/data/", UploadDate, "_long.Rdata", sep = "")) 
+load(paste0("~/PRiSMAv2Data/", site, "/", UploadDate,"/data/", UploadDate, "_long.Rdata", sep = "")) 
 
+na_variations <- c("n/a", "NA", "N/A", "na", NA, " ", "", ".")
+
+# Check conditions for merging
+if ((sum(mnh01$MOMID %in% na_variations | is.na(mnh01$MOMID), na.rm = TRUE) >= 1) | 
+    !(all(c("MOMID", "PREGID") %in% names(mnh01)))) {
+  
+  # Merge data frames by SCRNID
+  new_mnh01 <- merge(x = mnh01[, !(names(mnh01) %in% c("MOMID", "PREGID"))],
+                     y = mnh02[, c("SCRNID", "MOMID", "PREGID")],
+                     by = "SCRNID", all.x = TRUE)
+  
+  # Check if the merge was successful
+  if (nrow(new_mnh01) == 0) {
+    print("No data merged. Check if SCRNID exists in both data frames.")
+  } else {
+    print("Data merged successfully.")
+  }
+  
+} else {
+  # Print a message indicating that MOMID and PREGID are present
+  print("MOMID and PREGID are present.")
+}
 
 ## get MOMIDs in enrollment form 
 enroll_momid <- data_long %>% filter(form == "MNH02")
-enroll_momid_vec <- as.vector(unique(enroll_momid$MOMID))
+
+enroll_momid_vec <- as.vector(unique(enroll_momid$PREGID))
 
 ## get MOMIDs in all forms 
 all_momid <- data_long %>% filter(form != "MNH02" & form != "MNH00" & form != "MNH01")
 
 ## subset all MOMIDs that have forms 03-25 but not enrollment 
-out<-subset(all_momid, !(all_momid$MOMID %in% enroll_momid$MOMID))
+out <- subset(all_momid, !(all_momid$PREGID %in% enroll_momid$PREGID))
 
 ## only need the first four columns
-out <- out %>% select(SCRNID, MOMID, PREGID, INFANTID)
+out <- out %>% select(SCRNID, MOMID, PREGID, INFANTID, FORM = form, VISITDATE = VisitDate, TYPE_VISIT)  %>% 
+               distinct(MOMID, PREGID, INFANTID, FORM, TYPE_VISIT,  .keep_all = TRUE)
+
+## Export out the MOMID together with the forms we see them in
+xl_lst <- list( 'MOMID Missing MNH02' = out)
+
+write.xlsx(xl_lst, file = paste0(path_to_save, "/",  site, "_MOMIDNOTMATCHED", ".xlsx"))
+
 
 ## only need to keep 1 instance of the MOMID 
-out <- out %>% distinct(MOMID, PREGID, INFANTID,  .keep_all = TRUE)
+out <- out %>% distinct(MOMID, PREGID, INFANTID,  .keep_all = TRUE) %>% select(SCRNID, MOMID, PREGID, INFANTID)
 
 # rename dataframe 
 MomidNotMatched <- out
@@ -1431,7 +1463,7 @@ if (dim(MomidNotMatched)[1] >= 1){
     )
   
   #export Mom ID not matched query 
-  save(MomidNotMatched_query, file = paste0(maindir,"/queries/MomidNotMatched_query.rda"))
+  save(MomidNotMatched_query, file = paste0(path_to_save,"/MomidNotMatched_query.rda"))
   
 }
 
@@ -1444,7 +1476,7 @@ deliv_infid <- data_long %>% filter(form == "MNH09")
 deliv_infid_vec <- as.vector(unique(deliv_infid$INFANTID))
 
 ## get infant IDs in all infant forms 
-infant_forms <- c("MNH11", "MNH13", "MNH14", "MNH15","MNH20", "MHNH24")
+infant_forms <- c("MNH11", "MNH13", "MNH14", "MNH15","MNH20", "MHNH24", "MNH36")
 all_infid <- data_long %>% filter(form %in% infant_forms)
 
 ## subset all MOMIDs that have forms 11, 13, 14, 15, 20, & 24,  but not a delivery form 
@@ -1500,6 +1532,4 @@ if (dim(InfidNotMatched)[1] >= 1){
   
   
   #export Inf ID not matched query 
-  save(InfidNotMatched_query, file = paste0(maindir,"/queries/InfidNotMatched_query.rda"))
-}
-
+  save(InfidNotMatched_query, file = paste0(path_to_save,"/InfidNotMatched_query.rda"))
