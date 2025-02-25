@@ -207,6 +207,6 @@ if (exists("missing_query")==TRUE) {
   missing_query <- missing_query %>% filter(!is.na(`Form`))
   
   ## export variable checking query 
-  save(missing_query, file = paste0(maindir, "/queries/missing_query.rda"))
+  save(missing_query, file = paste0(path_to_save, "/queries/missing_query.rda"))
   
 }
