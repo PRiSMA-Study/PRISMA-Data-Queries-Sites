@@ -35,23 +35,27 @@ library(dplyr)
 library(data.table)
 library(lubridate)
 
-## UPDATE EACH RUN ## 
-# 1. Update "UploadDate" (this should match the folder name in synapse)
-# 2. Set "site" variable to the site you are running the query for 
-UploadDate = "2025-02-07"
-site = "Pakistan"
+# UPDATE EACH RUN: set site variable - this is necessary to call in the correct MNH25 variables from the data dictionary (each site has their own MNH25)
+site = "Kenya"
 
-# 3. Set your main directory 
-maindir <- paste0("~/PRiSMAv2Data/", site,"/", UploadDate, sep = "")
-#*****************************************************************************
-#* load data
-#*****************************************************************************
-## Load in long data 
-load(paste0("~/PRiSMAv2Data/", site, "/", UploadDate,"/data/", UploadDate, "_long.Rdata", sep = "")) 
+# UPDATE EACH RUN: Update "UploadDate" (this should match the folder name in synapse)
+UploadDate = "2023-08-25"
 
-## Load in wide data 
-load(paste0("~/PRiSMAv2Data/", site, "/", UploadDate,"/data/", UploadDate, "_wide.Rdata", sep = "")) 
+# UPDATE EACH RUN: load in the WIDE data we generated from 00_DataImport code -- for duplicates
+load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_wide.Rdata", sep = "")) 
+
+# UPDATE EACH RUN:load in the LONG data we generated from 00_DataImport code -- for protocol checks 
+load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = "")) 
+
+
+# UPDATE EACH RUN: set path to location where you want to save the query output below 
+path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries/"
+
 #*****************************************************************************
+####################################################################################################
+# 1. CONFIRM ALL "ENROLLED" PARTICIPANTS MEET PRISMA ENROLLMENT ELIGIBILITY CRITERIA
+####################################################################################################
+
 ####################################################################################################
 # 1. CONFIRM ALL "ENROLLED" PARTICIPANTS MEET PRISMA ENROLLMENT ELIGIBILITY CRITERIA
 ####################################################################################################
@@ -111,7 +115,7 @@ if (dim(MomidNotEligible)[1] >= 1){
     mutate(QueryID = paste0(Form, "_", VisitDate, "_",MomID, "_",`Variable Name`, "_", `Variable Value`, "_", "08"))
   
   ## export 
-  save(MomidNotEligible_query, file = paste0(maindir,"/queries/MomidNotEligible_query.rda"))
+  save(MomidNotEligible_query, file = paste0(path_to_save,"/queries/MomidNotEligible_query.rda"))
   
 }
 
@@ -180,13 +184,13 @@ if (dim(EligibilityReason)[1] >= 1){
   Comment <- merge(QueryID, EligibilityReason, by = "SCRNID")
   
   # Export data
-  save(InEligibilityCriteria_query, file = paste0(maindir,"/queries/InEligibilityCriteria_query.rda"))
-  save(Comment, file = paste0(maindir,"/queries/InEligibilityCriteria_comments.rda"))
+  save(InEligibilityCriteria_query, file = paste0(path_to_save,"/queries/InEligibilityCriteria_query.rda"))
+  save(Comment, file = paste0(path_to_save,"/queries/InEligibilityCriteria_comments.rda"))
 }
 
 # library(openxlsx)
 # 
-# file_path <- paste0(maindir,"/queries/", site,"_", "InEligibilityCriteria_query.xlsx") 
+# file_path <- paste0(path_to_save,"/queries/", site,"_", "InEligibilityCriteria_query.xlsx") 
 # 
 # # Write the dataframe to an Excel file
 # write.xlsx(EligibilityReason, file_path)
@@ -200,23 +204,23 @@ if (dim(EligibilityReason)[1] >= 1){
 # 3. CONFIRM ALL PARTICPANTS WHO HAVE PASSED THE IPC WINDOW HAVE A REPORTED BIRTH OUTCOME
 
 # Logic: If a participant has not yet had a birth outcome reported in MNH04 OR MNH09 and has passed the 
-# late window for IPC with GA>=48 weeks, a query will be pulled. 
+  # late window for IPC with GA>=48 weeks, a query will be pulled. 
 ####################################################################################################
 
 # pull all enrolled participants -- some sites reporting mnh01 for all screened but not enrolled participants
-## only enrolled particpants will be expected to have a birth outcome
+    ## only enrolled particpants will be expected to have a birth outcome
 
 if ("SCRN_RETURN" %in% names(mnh02) & site != "Ghana") {
-  
-  enrolled_ids <- mnh02 %>% 
-    mutate(ENROLL = ifelse(AGE_IEORRES == 1 & 
-                             PC_IEORRES == 1 & 
-                             CATCHMENT_IEORRES == 1 & 
-                             CATCH_REMAIN_IEORRES == 1 & 
-                             CONSENT_IEORRES == 1, 1, 0)) %>% 
-    filter(ENROLL == 1) %>% 
-    select(SCRNID, MOMID, PREGID)
-  
+
+enrolled_ids <- mnh02 %>% 
+  mutate(ENROLL = ifelse(AGE_IEORRES == 1 & 
+                         PC_IEORRES == 1 & 
+                         CATCHMENT_IEORRES == 1 & 
+                         CATCH_REMAIN_IEORRES == 1 & 
+                         CONSENT_IEORRES == 1, 1, 0)) %>% 
+  filter(ENROLL == 1) %>% 
+  select(SCRNID, MOMID, PREGID)
+
 } else {
   
   enrolled_ids <- mnh02 %>% 
@@ -318,7 +322,7 @@ mnh04_sub <- mnh04 %>%
          GESTAGE_FETAL_LOSS_WKS = GESTAGE_FETAL_LOSS_DAYS %/% 7) %>%
   select(MOMID, PREGID, FETAL_LOSS_DSSTDAT, GESTAGE_FETAL_LOSS_DAYS, GESTAGE_FETAL_LOSS_WKS) %>% 
   filter(!is.na(FETAL_LOSS_DSSTDAT))
-
+  
 
 
 # mnh09 
@@ -335,8 +339,8 @@ mnh09_sub <- mnh09 %>%
   mutate(DOB = pmin(DELIV_DSSTDAT_INF1, DELIV_DSSTDAT_INF2, DELIV_DSSTDAT_INF3, DELIV_DSSTDAT_INF4, na.rm = TRUE)) 
 
 ## merge in mnh10 and/or mnh23 if forms exist
-# we need to merge these in to generate a variable that looks at if ANY ipc visit is complete (requires mnh10)
-# and if a woman has closed out (mnh23)
+  # we need to merge these in to generate a variable that looks at if ANY ipc visit is complete (requires mnh10)
+  # and if a woman has closed out (mnh23)
 
 if (exists("mnh10")==TRUE & exists("mnh23")==TRUE) {
   
@@ -350,9 +354,9 @@ if (exists("mnh10")==TRUE & exists("mnh23")==TRUE) {
     full_join(mnh10[c("MOMID", "PREGID", "MAT_VISIT_MNH10")], by = c("MOMID", "PREGID")) %>% 
     # merge in closeout data 
     full_join(mnh23[c("MOMID", "PREGID", "CLOSE_DSDECOD", "CLOSE_DSSTDAT")], by = c("MOMID", "PREGID"))
-  
+
 } else if (exists("mnh10")==TRUE & exists("mnh23")==FALSE) {
-  
+    
   ipc_forms_merged <-  mnh01_sub %>% 
     select(MOMID, PREGID, EST_CONCEP_DATE) %>% 
     # merge in mnh04 fetal loss information
@@ -375,8 +379,8 @@ if (exists("mnh10")==TRUE & exists("mnh23")==TRUE) {
     full_join(mnh09_sub, by = c("MOMID", "PREGID")) %>% 
     # merge in closeout data 
     full_join(mnh23[c("MOMID", "PREGID", "CLOSE_DSDECOD", "CLOSE_DSSTDAT")], by = c("MOMID", "PREGID"))
-  # since mnh10 data does not exist, make an empty column with visit status
-  mutate(MAT_VISIT_MNH10 = NA)
+    # since mnh10 data does not exist, make an empty column with visit status
+    mutate(MAT_VISIT_MNH10 = NA)
 }
 
 ## generate query dataset (late window, passed windows, etc)
@@ -445,6 +449,6 @@ if (exists("ipc_forms_merged_query")==TRUE) {
   
   Missing_Ipc_Outcome_query <- ipc_forms_merged_query_to_export
   ## export variable checking query 
-  save(Missing_Ipc_Outcome_query, file = paste0(maindir, "/queries/Missing_Ipc_Outcome_query.rda"))
+  save(Missing_Ipc_Outcome_query, file = paste0(path_to_save, "/queries/Missing_Ipc_Outcome_query.rda"))
   
 }
