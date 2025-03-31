@@ -99,13 +99,13 @@ high_freq_outrange <- report %>% filter((VarFormEdit %in% high_freq_to_exclude_o
                                            `Variable Value` %in% high_freq_to_exclude_outrange$`Variable Value`)) %>%
   group_by(`Variable Value`, VarFormEdit, Form, `Variable Name`, EditType ) %>% 
   count(name = "Frequency") %>% 
-  filter(Frequency > 40) %>% 
+  filter(Frequency > 500) %>% 
   mutate_all(as.character)
 
 high_freq  <- report %>%  filter(VarFormEdit %in% high_freq_to_exclude$VarFormEdit ) %>%
   group_by(VarFormEdit, Form, `Variable Name`, EditType ) %>% 
   count(name = "Frequency") %>% 
-  filter(Frequency > 100)  %>% 
+  filter(Frequency > 500)  %>% 
   mutate (`Variable Value` = NA )%>% 
   mutate_all(as.character)
 
