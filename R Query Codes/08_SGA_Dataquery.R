@@ -38,14 +38,8 @@ site = "Kenya"
 # UPDATE EACH RUN: Update "UploadDate" (this should match the folder name in synapse)
 UploadDate = "2023-08-25"
 
-# UPDATE EACH RUN: load in the WIDE data we generated from 00_DataImport code load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_wide.Rdata", sep = "")) 
-
-# UPDATE EACH RUN:load in the LONG data we generated from 00_DataImport code load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = "")) 
-
-
 # UPDATE EACH RUN: set path to location where you want to save the query output below 
 path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries/"
-
 
 ## if a site has all the forms needed for this query, the remainder of the code will run. if not, the code will stop
 if (exists("mnh01")== TRUE & exists("mnh09")== TRUE & exists("mnh11")== TRUE){
