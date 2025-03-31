@@ -41,12 +41,17 @@ load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_wide.Rdata", sep = 
 # UPDATE EACH RUN:load in the LONG data we generated from 00_DataImport code -- for protocol checks 
 load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = "")) 
 
-
 # UPDATE EACH RUN: set path to location where you want to save the query output below 
 path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries/"
 
+# UPDATE EACH RUN: 
+#Import Your ReMAPP IDs Dataset
+#Your REmapp Dataset should have PREGID, MOMID or participants enrolled in REMAPP Aim 3
+remapp_ids <- read_xlsx ("C:/ReMAPP_Aim3_IDs//ReMAPP_Aim3_ID.xlsx") 
+
 #*****************************************************************************
 #* check duplicated IDs, also check the rest vars' info
+#*****************************************************************************
 #*****************************************************************************
 #*Make empty dataframe 
 VarNamesDuplicate <- as.data.frame(matrix(nrow = 1, ncol = 6))
@@ -151,7 +156,7 @@ if (exists("mnh01")==TRUE){
   out_us <- dup_US(mnh01)
   
   # export key variables if duplicates exists 
-  out_us <- out_us %>% select(SCRNID, MOMID, PREGID, TYPE_VISIT, US_OHOSTDAT)
+  out_us <- out_us %>% select(SCRNID,MOMID, PREGID, TYPE_VISIT, US_OHOSTDAT)
   # out_us <- out_us %>% select(SCRNID,MOMID, PREGID, TYPE_VISIT)
   # out_us <- add_column(out_us,FORMCOMPLDAT_MNH01 =NA)
   
@@ -1311,7 +1316,6 @@ for (dataset_name in datasets) {
 #****************************************
 # 08/04 UPDATE: THERE ARE INSTANCES OF MISSING INFANTIDS IN INFANT FORMS -- ADD NEW ERROR TYPE HERE 
 # add infant id column to momid dataframe 
-
 names(VarNamesDuplicate) = c("SCRNID","MOMID", "PREGID","VisitType", "VisitDate", "Form")
 VarNamesDuplicate <- add_column(VarNamesDuplicate, INFANTID = NA, .after = "PREGID")
 
@@ -1364,11 +1368,12 @@ VarNamesDuplicate <- VarNamesDuplicate %>%
 
 duplicates_query <- VarNamesDuplicate
 
-## REMOVE VISIT TYPE = 13 or 14 
+
+## REMOVE VISIT TYPE = 13 or 14 only when GSED and FCI forms are not involved
 duplicates_query <- duplicates_query %>% filter(!VisitType %in% c(13,14) & !(Form %in% c("MNH30", "MNH31", "MNH32")))
 
 #export
-save(duplicates_query, file = paste0(path_to_save,"/duplicates_query.rda"))
+save(duplicates_query, file = paste0(path_to_save,"/queries/duplicates_query.rda"))
 
 #*****************************************************************************
 #* comparing mom id 
@@ -1377,52 +1382,22 @@ save(duplicates_query, file = paste0(path_to_save,"/duplicates_query.rda"))
 ## Load in long data  
 load(paste0("~/PRiSMAv2Data/", site, "/", UploadDate,"/data/", UploadDate, "_long.Rdata", sep = "")) 
 
-na_variations <- c("n/a", "NA", "N/A", "na", NA, " ", "", ".")
-
-# Check conditions for merging
-if ((sum(mnh01$MOMID %in% na_variations | is.na(mnh01$MOMID), na.rm = TRUE) >= 1) | 
-    !(all(c("MOMID", "PREGID") %in% names(mnh01)))) {
-  
-  # Merge data frames by SCRNID
-  new_mnh01 <- merge(x = mnh01[, !(names(mnh01) %in% c("MOMID", "PREGID"))],
-                     y = mnh02[, c("SCRNID", "MOMID", "PREGID")],
-                     by = "SCRNID", all.x = TRUE)
-  
-  # Check if the merge was successful
-  if (nrow(new_mnh01) == 0) {
-    print("No data merged. Check if SCRNID exists in both data frames.")
-  } else {
-    print("Data merged successfully.")
-  }
-  
-} else {
-  # Print a message indicating that MOMID and PREGID are present
-  print("MOMID and PREGID are present.")
-}
 
 ## get MOMIDs in enrollment form 
 enroll_momid <- data_long %>% filter(form == "MNH02")
-
-enroll_momid_vec <- as.vector(unique(enroll_momid$PREGID))
+enroll_momid_vec <- as.vector(unique(enroll_momid$MOMID))
 
 ## get MOMIDs in all forms 
 all_momid <- data_long %>% filter(form != "MNH02" & form != "MNH00" & form != "MNH01")
 
 ## subset all MOMIDs that have forms 03-25 but not enrollment 
-out <- subset(all_momid, !(all_momid$PREGID %in% enroll_momid$PREGID))
+out<-subset(all_momid, !(all_momid$MOMID %in% enroll_momid$MOMID))
 
 ## only need the first four columns
-out <- out %>% select(SCRNID, MOMID, PREGID, INFANTID, FORM = form, VISITDATE = VisitDate, TYPE_VISIT)  %>% 
-               distinct(MOMID, PREGID, INFANTID, FORM, TYPE_VISIT,  .keep_all = TRUE)
-
-## Export out the MOMID together with the forms we see them in
-xl_lst <- list( 'MOMID Missing MNH02' = out)
-
-write.xlsx(xl_lst, file = paste0(path_to_save, "/",  site, "_MOMIDNOTMATCHED", ".xlsx"))
-
+out <- out %>% select(SCRNID, MOMID, PREGID, INFANTID)
 
 ## only need to keep 1 instance of the MOMID 
-out <- out %>% distinct(MOMID, PREGID, INFANTID,  .keep_all = TRUE) %>% select(SCRNID, MOMID, PREGID, INFANTID)
+out <- out %>% distinct(MOMID, PREGID, INFANTID,  .keep_all = TRUE)
 
 # rename dataframe 
 MomidNotMatched <- out
@@ -1463,7 +1438,7 @@ if (dim(MomidNotMatched)[1] >= 1){
     )
   
   #export Mom ID not matched query 
-  save(MomidNotMatched_query, file = paste0(path_to_save,"/MomidNotMatched_query.rda"))
+  save(MomidNotMatched_query, file = paste0(path_to_save,"/queries/MomidNotMatched_query.rda"))
   
 }
 
@@ -1476,7 +1451,7 @@ deliv_infid <- data_long %>% filter(form == "MNH09")
 deliv_infid_vec <- as.vector(unique(deliv_infid$INFANTID))
 
 ## get infant IDs in all infant forms 
-infant_forms <- c("MNH11", "MNH13", "MNH14", "MNH15","MNH20", "MHNH24", "MNH36")
+infant_forms <- c("MNH11", "MNH13", "MNH14", "MNH15","MNH20", "MHNH24")
 all_infid <- data_long %>% filter(form %in% infant_forms)
 
 ## subset all MOMIDs that have forms 11, 13, 14, 15, 20, & 24,  but not a delivery form 
@@ -1532,4 +1507,155 @@ if (dim(InfidNotMatched)[1] >= 1){
   
   
   #export Inf ID not matched query 
-  save(InfidNotMatched_query, file = paste0(path_to_save,"/InfidNotMatched_query.rda"))
+  save(InfidNotMatched_query, file = paste0(path_to_save,"/queries/InfidNotMatched_query.rda"))
+}
+
+#*****************************************************************************
+#*ReMAPP Aim 3 Participant List
+#*****************************************************************************
+
+#* STEP 1: not all sites are reporting momid and pregid in mnh01 - this will cause some issues in this workflow 
+#* solution: merge in momid and pregid from MNH02 into MNH01 based on scrnid
+
+mnh02_ids <- mnh02 %>% select(SCRNID, MOMID, PREGID)
+
+if (site == "Zambia"){
+  # Zambia is reporting some values as "." - this will break the flow. the following code will replace with "-7"
+  mnh01_newids <- mnh01 %>% select(-MOMID, -PREGID) %>% ## remove momid and pregid vars in mnh01 - will use ids from mnh02
+    left_join(mnh02_ids, by = c("SCRNID")) %>% 
+    mutate_at(vars(starts_with("US_GA_")), ~ as.numeric(ifelse(. == ".", -7, as.character(.)))) 
+  
+} else {
+  mnh01_newids <- mnh01 %>% select(-MOMID, -PREGID) %>% ## remove momid and pregid vars in mnh01 - will use ids from mnh02
+    left_join(mnh02_ids, by = c("SCRNID"))
+  
+}
+
+#* STEP 2 : Export key variables from each dataframe: MOMID, PREGID, VISIT DATE 
+#* for MNH01: export GA information 
+
+# India-CMC is already reporting acog (CAL_GA_WKS_AGE_FTS1-4 & CAL_GA_DAYS_AGE_FTS1-4) - use these estimates as the BOE for CMC site
+if (site=="India-CMC" | site=="India-SAS"){
+  
+  mnh01_raw <- mnh01_newids %>% select(MOMID, PREGID, US_OHOSTDAT, TYPE_VISIT, contains("CAL_GA_WKS_AGE_"), contains("CAL_GA_DAYS_AGE_"))
+  
+  ## only extract key variables from each of the forms that check for visit type 
+  ## for MNH01, need to extract the maximum GA age (currently using US -- will eventually update to ACOG)
+  PREG_START_DATE <- mnh01_newids %>% select(MOMID, PREGID, US_OHOSTDAT, TYPE_VISIT, contains("CAL_GA_WKS_AGE_"), contains("CAL_GA_DAYS_AGE_")) %>% 
+    ## extract the maximum gestational age for each woman 
+    mutate(GA_US_DAYS_FTS1 =  ifelse(CAL_GA_WKS_AGE_FTS1!= -7 & CAL_GA_DAYS_AGE_FTS1 != -7,  (CAL_GA_WKS_AGE_FTS1 * 7 + CAL_GA_DAYS_AGE_FTS1), NA), 
+           GA_US_DAYS_FTS2 =  ifelse(CAL_GA_WKS_AGE_FTS2!= -7 & CAL_GA_DAYS_AGE_FTS2 != -7,  (CAL_GA_WKS_AGE_FTS2 * 7 + CAL_GA_DAYS_AGE_FTS2), NA),
+           GA_US_DAYS_FTS3 =  ifelse(CAL_GA_WKS_AGE_FTS3!= -7 & CAL_GA_DAYS_AGE_FTS3 != -7,  (CAL_GA_WKS_AGE_FTS3 * 7 + CAL_GA_DAYS_AGE_FTS3), NA),
+           GA_US_DAYS_FTS4 =  ifelse(CAL_GA_WKS_AGE_FTS4!= -7 & CAL_GA_DAYS_AGE_FTS4 != -7,  (CAL_GA_WKS_AGE_FTS4 * 7 + CAL_GA_DAYS_AGE_FTS4), NA)) %>% 
+    mutate(GA_US_DAYS = pmax(GA_US_DAYS_FTS1, GA_US_DAYS_FTS2, GA_US_DAYS_FTS3, GA_US_DAYS_FTS4, na.rm = TRUE)) %>% 
+    ## convert to weeks 
+    mutate(GA_US_WKS = GA_US_DAYS %/% 7) %>% 
+    mutate(GA_US_WKS = as.numeric(paste0(GA_US_WKS, ".", (GA_US_WKS-(GA_US_WKS*7))))) %>% 
+    mutate(US_OHOSTDAT = ymd(parse_date_time(US_OHOSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
+    ## remove any unscheduled visit types
+    filter(TYPE_VISIT != 13) %>% 
+    # "zero out" GA and obtain the estimated "date of conception" 
+    mutate(EST_CONCEP_DATE = US_OHOSTDAT - GA_US_DAYS) %>% 
+    select(MOMID, PREGID, EST_CONCEP_DATE)
+  
+} else {
+  
+  mnh01_raw <- mnh01_newids %>% select(MOMID, PREGID, US_OHOSTDAT, TYPE_VISIT,
+                                       US_GA_WKS_AGE_FTS1, US_GA_DAYS_AGE_FTS1, US_GA_WKS_AGE_FTS2, US_GA_DAYS_AGE_FTS2,
+                                       US_GA_WKS_AGE_FTS3, US_GA_DAYS_AGE_FTS3, US_GA_WKS_AGE_FTS4, US_GA_DAYS_AGE_FTS4) 
+  ## only extract key variables from each of the forms that check for visit type 
+  ## for MNH01, need to extract the maximum GA age (currently using US -- will eventually update to ACOG)
+  PREG_START_DATE <- mnh01_newids %>% select(MOMID, PREGID, US_OHOSTDAT, TYPE_VISIT,
+                                       US_GA_WKS_AGE_FTS1, US_GA_DAYS_AGE_FTS1, US_GA_WKS_AGE_FTS2, US_GA_DAYS_AGE_FTS2,
+                                       US_GA_WKS_AGE_FTS3, US_GA_DAYS_AGE_FTS3, US_GA_WKS_AGE_FTS4, US_GA_DAYS_AGE_FTS4) %>% 
+    ## extract the maximum gestational age for each woman 
+    mutate(GA_US_DAYS_FTS1 =  ifelse(US_GA_WKS_AGE_FTS1!= -7 & US_GA_DAYS_AGE_FTS1 != -7,  (US_GA_WKS_AGE_FTS1 * 7 + US_GA_DAYS_AGE_FTS1), NA), 
+           GA_US_DAYS_FTS2 =  ifelse(US_GA_WKS_AGE_FTS2!= -7 & US_GA_DAYS_AGE_FTS2 != -7,  (US_GA_WKS_AGE_FTS2 * 7 + US_GA_DAYS_AGE_FTS2), NA),
+           GA_US_DAYS_FTS3 =  ifelse(US_GA_WKS_AGE_FTS3!= -7 & US_GA_DAYS_AGE_FTS3 != -7,  (US_GA_WKS_AGE_FTS3 * 7 + US_GA_DAYS_AGE_FTS3), NA),
+           GA_US_DAYS_FTS4 =  ifelse(US_GA_WKS_AGE_FTS4!= -7 & US_GA_DAYS_AGE_FTS4 != -7,  (US_GA_WKS_AGE_FTS4 * 7 + US_GA_DAYS_AGE_FTS4), NA)) %>% 
+    mutate(GA_US_DAYS = pmax(GA_US_DAYS_FTS1, GA_US_DAYS_FTS2, GA_US_DAYS_FTS3, GA_US_DAYS_FTS4, na.rm = TRUE)) %>% 
+    ## convert to weeks 
+    mutate(GA_US_WKS = GA_US_DAYS %/% 7) %>%
+    mutate(GA_US_WKS = ifelse(!is.na(GA_US_WKS), paste0(GA_US_WKS, ".", (GA_US_DAYS-(GA_US_WKS*7))), NA),
+           GA_US_WKS = as.numeric(GA_US_WKS)) %>% 
+    mutate(US_OHOSTDAT = ymd(parse_date_time(US_OHOSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
+    ## remove any unscheduled visit types
+    filter(TYPE_VISIT != 13) %>% 
+    # "zero out" GA and obtain the estimated "date of conception" 
+    mutate(EST_CONCEP_DATE = US_OHOSTDAT - GA_US_DAYS) %>% 
+    select(MOMID, PREGID, EST_CONCEP_DATE)
+}
+
+#***STEP 3: 
+#*Compute the Queries
+
+mnh07_remapp <- mnh07 %>% 
+  filter (LB_REMAPP3 == 1 & TYPE_VISIT %in% c(1:5, 13)) %>% 
+  mutate (FORM = "MNH07") %>% 
+  select (MOMID, PREGID, TYPE_VISIT, FORM, VisitDate = MAT_SPEC_COLLECT_DAT , LB_REMAPP3, LB_REMAPP3_TRI)
+  
+mnh08_remapp <- mnh08 %>% 
+  filter (LB_REMAPP3 == 1 & TYPE_VISIT %in% c(1:5, 13)) %>% 
+  mutate (FORM = "MNH08") %>% 
+  select (MOMID, PREGID, TYPE_VISIT, FORM, VisitDate = LBSTDAT, LB_REMAPP3, LB_REMAPP3_TRI)
+
+all_remapp_visits <- bind_rows(mnh07_remapp, mnh08_remapp) %>% 
+  left_join(PREG_START_DATE, by = c("MOMID", "PREGID")) %>% 
+  mutate(VisitDate = ymd(parse_date_time(VisitDate, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+        ga_days = as.numeric(ymd(VisitDate) - ymd(EST_CONCEP_DATE)) ,
+         trimester = case_when(
+           LB_REMAPP3 == 1 & ga_days <= 97 ~ 1,
+           LB_REMAPP3 == 1 & ga_days <= 195 ~ 2,
+           LB_REMAPP3 == 1 & ga_days > 195  ~ 3,
+           TRUE ~ NA_integer_  # Ensures consistency
+         ),
+         # Are you not enrolled and not on the list?
+         Query_1 = if_else(LB_REMAPP3 == 1 & !(PREGID %in% remapp_ids$PREGID), 
+                           "Participant Not Enrolled in ReMAPP Aim3", 
+                           "No Query"),
+         # Does your trimester correlate with your GA, if enrolled?
+         Query_2 = if_else(PREGID %in% remapp_ids$PREGID & LB_REMAPP3 == 1 & LB_REMAPP3_TRI != trimester & !is.na(trimester), 
+                           "LB_REMAPP3_TRI: Trimester and GA Mismatch", 
+                           "No Query")
+  )
+
+
+remapp_query <- all_remapp_visits %>% 
+  pivot_longer(cols = c(Query_1, Query_2), names_to = "Query_Type", values_to = "Query") %>% 
+  filter(Query != "No Query")  # Remove rows where Query is NA
+
+if (dim(remapp_query)[1] >= 1){
+  
+  remapp_query <- remapp_query %>% 
+    mutate (ScrnID = "", 
+            InfantID = "",
+            `Variable Value` = case_when (Query_Type == "Query_1" ~ LB_REMAPP3, 
+                                          Query_Type == "Query_2" ~ LB_REMAPP3_TRI,
+                                          TRUE ~ NA),
+            `Variable Name` =  case_when (Query_Type == "Query_1" ~ "LB_REMAPP3", 
+                                          Query_Type == "Query_2" ~ "LB_REMAPP3_TRI",
+                                          TRUE ~ NA_character_)
+    ) %>% 
+    select (ScrnID, MomID = MOMID, PregID = PREGID, InfantID, VisitType = TYPE_VISIT, 
+            VisitDate, EditType = Query, Form = FORM, `Variable Name`, `Variable Value`)
+  
+  ## add additional columns 
+  Remapp_query = cbind(QueryID = NA, 
+                       UploadDate = UploadDate, 
+                       remapp_query, 
+                       DateEditReported = format(Sys.time(), "%Y-%m-%d")) 
+  
+  
+  # combine form/edit type var 
+  Remapp_query <- add_column(Remapp_query,Form_Edit_Type = paste(Remapp_query$Form, "_", Remapp_query$EditType))
+  
+  
+  ## assign queryid 
+    Remapp_query <- Remapp_query %>% 
+    mutate(QueryID = paste0("ReMAPP_Aim3", "_", PregID, "_",  VisitDate, "_", `Variable Value`, "_", "04")) %>% 
+    mutate_all(as.character())
+  
+  #export Mom ID not matched query 
+  save(Remapp_query, file = paste0(path_to_save,"/queries/Remapp_query.rda"))
+  
+} else {print ("No ReMAPP Aim 3 Query")}
