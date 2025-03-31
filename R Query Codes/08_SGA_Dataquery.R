@@ -5,7 +5,8 @@
 #*****************************************************************************
 #* Items to Update before running script 
 #* You can copy and paste "UPDATE EACH RUN" to find where to update 
-#* Last updated: 6 March 2024
+#* Last Updated: 30 March 2025
+#* Updated the codes to new version
 
 #* 1. Update "UploadDate" 
 #* 2. Set "site" variable to the site you are running the query for
