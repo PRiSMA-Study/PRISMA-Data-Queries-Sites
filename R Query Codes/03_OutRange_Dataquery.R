@@ -53,7 +53,7 @@ varNames_sheet <- varNames_sheet %>% rename("varname" = `Variable Name`, "form" 
 #* AC_PERES_01_FTS1; AC_PERES_MEAN_FTS1
 #* HC_PERES_01_FTS1; HC_PERES_MEAN_FTS1
 #* BPD_PERES_01_FTS1; BPD_PERES_MEAN_FTS1
-fetalRange_sheet <- read_excel("~/PRiSMAv2Data/PRISMA-Data-Queries-Sites/R Query Codes/fetal_biometry_range.xlsx")
+fetalRange_sheet <- read_excel("~/PRiSMAv2Data/Queries/fetal_biometry_range.xlsx")
 
 ## will need to update US_TYPE or TYPE_VISIT depending on what sites are reporting 
 fetal_biometry_vars = c("SCRNID","MOMID","PREGID","US_OHOSTDAT", "TYPE_VISIT", "US_VISIT", 
@@ -197,15 +197,6 @@ if (nrow(FetalBioRangeQuery_Export)>=1){
 if (nrow(FetalBioRangeQuery_Export)>=1){
   FetalBioRangeQuery_Export$`Variable Value` = as.character(FetalBioRangeQuery_Export$`Variable Value`)
 }
-
-#*****************************************************************************
-#*Categorical Variable Queries 
-#*****************************************************************************
-
-## merge data dictionary and site data  
-invalid_response_merge <- left_join(varNames_sheet, data_long, by = c("varname", "form"))
-## make vector of MNH25 forms - we will check these separately at the end 
-m25_forms = c("MNH25_Ghana", "MNH25_India", "MNH25_Kenya", "MNH25_Zambia", "MNH25_Pakistan")
 
 #*****************************************************************************
 #*Categorical Variable Queries
@@ -355,7 +346,6 @@ ConRangeQuery_Export <- ConRangeQuery_Export %>%
   filter(var_range_out == 0) %>%
   select(-var_range_out)
 
-
 if (site == "India-SAS") {
   
   ConRangeQuery_Export <- ConRangeQuery_Export %>% mutate(VisitDate = ymd(parse_date_time(VisitDate, order = c("%m/%d/%y", "%Y-%m-%d")))) 
@@ -440,11 +430,95 @@ if (nrow(DateRangeQuery_Export)>=1){
   DateRangeQuery_Export$`Variable Value` = as.character(DateRangeQuery_Export$`Variable Value`)
 }
 
+#Date Query Part 2: Are post-delivery forms before or after delivery
+#Call in MNH09, MNH10, MNH11
+mnh09_sub <- mnh09 %>%
+  select(MOMID, PREGID, MAT_VISIT_MNH09, INFANTS_FAORRES, MAT_LD_OHOSTDAT,
+         INFANTID_INF1, INFANTID_INF2, INFANTID_INF3, INFANTID_INF4, DELIV_DSSTDAT_INF1, DELIV_DSSTDAT_INF2, 
+         DELIV_DSSTDAT_INF3, DELIV_DSSTDAT_INF4, DELIV_DSSTTIM_INF1, DELIV_DSSTTIM_INF2, DELIV_DSSTTIM_INF3, 
+         DELIV_DSSTTIM_INF4, BIRTH_DSTERM_INF1, BIRTH_DSTERM_INF2, BIRTH_DSTERM_INF3, BIRTH_DSTERM_INF4) %>%
+  
+  # Date parsing and conversion
+  mutate(across(c(DELIV_DSSTDAT_INF1:DELIV_DSSTDAT_INF4), 
+                ~ ymd(parse_date_time(.x, c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))))) %>%
+  
+  # Replace default dates and times with NA
+  mutate(across(starts_with("DELIV_DSSTDAT_INF"), 
+                ~ replace(.x, .x %in% c(ymd("1907-07-07"), ymd("2007-07-07")), NA)),
+         across(starts_with("DELIV_DSSTTIM_INF"), 
+                ~ replace(.x, .x == "77:77", NA))) %>%
+  
+  # Time conversion
+  mutate(across(starts_with("DELIV_DSSTTIM_INF"), ~ if_else(!is.na(.x), as.ITime(.x), NA))) %>%
+  
+  # Concatenate date and time into datetime
+  mutate(DELIVERY_DATETIME_INF1 = if_else(!is.na(DELIV_DSSTDAT_INF1) & !is.na(DELIV_DSSTTIM_INF1),
+                                          as.POSIXct(paste(DELIV_DSSTDAT_INF1, DELIV_DSSTTIM_INF1), format = "%Y-%m-%d %H:%M:%S"), 
+                                          NA),
+         DELIVERY_DATETIME_INF2 = if_else(!is.na(DELIV_DSSTDAT_INF2) & !is.na(DELIV_DSSTTIM_INF2),
+                                          as.POSIXct(paste(DELIV_DSSTDAT_INF2, DELIV_DSSTTIM_INF2), format = "%Y-%m-%d %H:%M:%S"), 
+                                          NA),
+         DELIVERY_DATETIME_INF3 = if_else(!is.na(DELIV_DSSTDAT_INF3) & !is.na(DELIV_DSSTTIM_INF3),
+                                          as.POSIXct(paste(DELIV_DSSTDAT_INF3, DELIV_DSSTTIM_INF3), format = "%Y-%m-%d %H:%M:%S"), 
+                                          NA),
+         DELIVERY_DATETIME_INF4 = if_else(!is.na(DELIV_DSSTDAT_INF4) & !is.na(DELIV_DSSTTIM_INF4),
+                                          as.POSIXct(paste(DELIV_DSSTDAT_INF4, DELIV_DSSTTIM_INF4), format = "%Y-%m-%d %H:%M:%S"), 
+                                          NA)) %>% 
+  # Define maternal delivery date as the earliest infant delivery date
+  mutate(MAT_DELIVERY_DATE = pmin(DELIV_DSSTDAT_INF1, DELIV_DSSTDAT_INF2, DELIV_DSSTDAT_INF3, DELIV_DSSTDAT_INF4, na.rm = TRUE)) %>% 
+  select (MOMID, PREGID, MAT_DELIVERY_DATE) %>% 
+  filter (!is.na(MAT_DELIVERY_DATE))
 
+mmh10_sub <- mnh10 %>% 
+  mutate (FORM = "MNH10", INFANTID = "") %>% 
+  select (MOMID, PREGID, INFANTID, FORM,  VISIT_OBSSTDAT)
 
+mmh11_sub <- mnh11 %>% 
+  mutate (FORM = "MNH11") %>% 
+  select (MOMID, PREGID, INFANTID, FORM, VISIT_OBSSTDAT)
 
+post_delivery_df <- bind_rows(mmh10_sub, mmh11_sub) %>%
+  mutate(
+    VISIT_OBSSTDAT = parse_date_time(VISIT_OBSSTDAT, c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")) %>% as_date()
+  )
 
+post_delivery_df1 <- post_delivery_df %>%
+  left_join(mnh09_sub, by = c("MOMID", "PREGID")) %>%
+  mutate(
+    Query = case_when(
+      VISIT_OBSSTDAT %in% ymd(c("1907-07-07", "1905-05-05", "2007-07-07")) ~ 1,
+      MAT_DELIVERY_DATE > VISIT_OBSSTDAT ~ 2,
+      TRUE ~ 0
+    ),
+    EditType = case_when(
+      Query == 1 ~ "VisitDate is a default value",
+      Query == 2 ~ "VisitDate Before Delivery",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(Query %in% c(1, 2))
 
+if (nrow(post_delivery_df1)>=1){
+  
+post_delivery_query <- post_delivery_df1 %>% mutate (Form = FORM,
+                                                     SCRNID = "",
+                                                     TYPE_VISIT = "",
+                                                     VisitDate = VISIT_OBSSTDAT,
+                                                    `Variable Value` = VISIT_OBSSTDAT, 
+                                                    `Variable Name` = "VISIT_OBSSTDAT") %>% 
+  select(SCRNID, MOMID, PREGID, INFANTID, TYPE_VISIT, VisitDate, Form, `Variable Name`, `Variable Value`, EditType)
+
+# update naming
+names(post_delivery_query) = c("ScrnID","MomID", "PregID","InfantID", "VisitType", "VisitDate", "Form", "Variable Name", "Variable Value", "EditType")
+
+## add additional columns 
+
+  Post_Delivery_Query_Export = cbind(QueryID = NA, 
+                              UploadDate = UploadDate, 
+                              post_delivery_query, 
+                              FieldType = "Date", 
+                              DateEditReported = format(Sys.time(), "%Y-%m-%d"))
+}
 
 #*****************************************************************************
 #*MNH25 Variable Queries 
@@ -644,6 +718,7 @@ if (site_mnh25=="Ghana"){
   
   # extract continuous variables from the data dictionary 
   requested_varNames_out <- varNames_sheet %>% filter(form == "MNH25_Ghana") 
+  form_num = toupper(form_num)
   requested_varNames_out_var <- requested_varNames_out %>%
     filter(`Query Category` == "Continuous") %>% 
     pull(varname)
@@ -911,25 +986,6 @@ if (nrow(M25_OutRangeNumericQuery_Export)>=1){
   M25_OutRangeNumericQuery_Export$`Variable Value` = as.character(M25_OutRangeNumericQuery_Export$`Variable Value`)
 }
 
-# default_values_continuous <- as.numeric(c("-5", "-8", "-7", "-9", "-6"))
-# out_range_default_value_continuous <- forms_con_merged %>% 
-#   group_by(varname) %>% 
-#   add_count(name = "n_total") %>%                    ## get the total count for each variable 
-#   filter(editmessage == "Out of Range") %>%          ## only look at the variables that do not include default values in the resposne options
-#   group_by(form, varname, response,n_total) %>%      ## group by variable name, response, total, and form
-#   count(name ="n_response") %>%                      ## count the number each specific response is reported 
-#   mutate(pcnt_total = (n_response/n_total)*100) %>%  ## get percentage each response
-#   filter(response %in% default_values_continuous)    ## exclude to only the default values 
-# 
-# # remove default values from query, but will review tabulation at end of script 
-# forms_con_query <- forms_con_query %>% filter(!(response %in% default_values_continuous))
-# 
-# ## only keep the first 7 columns 
-# forms_con_query <- forms_con_query %>% dplyr:: select(SCRNID, MOMID, PREGID, INFANTID,TYPE_VISIT, VisitDate, form, varname, response) %>%
-#   setcolfirst(SCRNID, MOMID, PREGID, INFANTID,TYPE_VISIT,VisitDate, form, varname, response) 
-# ConRangeQuery_Export <- forms_con_query
-
-
 #*****************************************************************************
 #* Blood Pressure Measurement
 #* Goal 1: To compare the difference between bps to ensure that Systolic bp is ALWAYS higher than Diastolic bp: Query if negative
@@ -962,8 +1018,10 @@ analyze_blood_pressure <- function(df_name, suffix) {
   
   # Retrieve the data frame from the global environment
   df <- get(df_name)
+  
   # Define the variable suffix
   suffix <- toupper(suffix)
+  
   # Filter and process data based on the given suffix
   blood_pressure_df <- df %>%
     filter(get(paste0("MAT_VISIT_", suffix)) %in% c(1, 2) & get(paste0("MAT_VITAL_", suffix)) == 1 & get("BP_VSSTAT") == 1) %>%
@@ -971,7 +1029,7 @@ analyze_blood_pressure <- function(df_name, suffix) {
     select(SCRNID, MOMID, PREGID, INFANTID, VisitDate, VisitType = TYPE_VISIT, Form,
            starts_with(paste0("BP_SYS")), starts_with(paste0("BP_DIA"))) %>%
     mutate(across(starts_with(paste0("BP_SYS")) | starts_with(paste0("BP_DIA")), as.numeric)) %>%
-    mutate(across(starts_with(paste0("BP_SYS")) | starts_with(paste0("BP_DIA")), ~ ifelse(. %in% c(-7, -5, -9), NA, .)))
+    mutate(across(starts_with(paste0("BP_SYS")) | starts_with(paste0("BP_DIA")), ~ ifelse(. %in% c(-7, -5), NA, .)))
   
   # Initialize an empty list to store results
   QueryList <- list()
@@ -985,7 +1043,7 @@ analyze_blood_pressure <- function(df_name, suffix) {
     # Compute the difference
     Query <- blood_pressure_df %>%
       mutate(
-        PulsePressure = ifelse((!is.na(.[[sys_col]]) & !is.na(.[[dia_col]])), (.[[sys_col]] - .[[dia_col]]), NA),
+        PulsePressure = ifelse(!is.na(.[[sys_col]]) & !is.na(.[[dia_col]]), (.[[sys_col]] - .[[dia_col]]), NA),
         Threshold = ifelse(!is.na(.[[sys_col]]), .[[sys_col]] * 0.125, NA),
         EditType = ifelse(is.na(PulsePressure) | is.na(Threshold), "N/A",
                           ifelse(PulsePressure == 0, paste0("Systolic BP is equal to Diastolic BP"),
@@ -1001,23 +1059,23 @@ analyze_blood_pressure <- function(df_name, suffix) {
     QueryList[[i]] <- Query
   }
   
-  # Combine the queries into a single data frame
-  blood_pressure_query <- do.call(rbind, QueryList)
+  # Combine lists to form a data frame
+  blood_pressure_query <- as.data.frame(do.call(rbind, QueryList))
   
-  # Select relevant columns for export
+  # Select relevant columns for blood_pressure_query_export
   blood_pressure_query_export <- blood_pressure_query %>%
     select(SCRNID, MOMID, PREGID, INFANTID, VisitType, VisitDate, Form, Variable_Name, Variable_Value, EditType)
   
-  # Rename columns for final export
-  colnames(blood_pressure_query_export) <- c("ScrnID", "MomID", "PregID", "InfantID", "VisitType", "VisitDate", "Form", "Variable Name", "Variable Value", "EditType")
+  names(blood_pressure_query_export) <- c("ScrnID", "MomID", "PregID", "InfantID", "VisitType", "VisitDate", "Form", "Variable Name", "Variable Value", "EditType" )
   
-  # Add additional columns for export
+  # Add additional columns
   if (nrow(blood_pressure_query_export) >= 1) {
     BloodPressureQuery_Export <- cbind(QueryID = NA, UploadDate = UploadDate, blood_pressure_query_export,
                                        FieldType = "Number", DateEditReported = format(Sys.time(), "%Y-%m-%d"))
     
-    return(list(BloodPressureQuery_Export = BloodPressureQuery_Export, 
-                blood_pressure_query_all = blood_pressure_query))
+    BloodPressureQuery_Export$`Variable Value` <- as.character(BloodPressureQuery_Export$`Variable Value`)
+    
+    return(BloodPressureQuery_Export)
   } else {
     return(NULL)
   }
@@ -1046,27 +1104,17 @@ for (i in seq_along(df_names)) {
 
 # Combine all results into a single data frame if there are results
 if (length(all_results) > 0) {
-  
-  result_comment <- do.call(rbind, lapply(all_results, function(x) x$blood_pressure_query_all))
-  combined_results <- do.call(rbind, lapply(all_results, function(x) x$BloodPressureQuery_Export))
-  
-  BloodPressureQuery_Export <- as.data.frame (combined_results)
-  BloodPressureQuery_Comment <- as.data.frame (result_comment)
-  
-  
-  if (site == "Zambia") {
-    # Define the file path
-    file_path <- paste0(path_to_save, "/Blood Pressure.xlsx")
-    # Save the raw_bp_data DataFrame to the specified file path in Excel format
-    write.xlsx(BloodPressureQuery_Comment, file = file_path, overwrite = TRUE) }
-  
-  # Print summary
-  print("Blood Pressure Query Exported Successfully")
+  combined_results <- do.call(rbind, all_results)
 } else {
-  print("No Blood Pressure Query Found")
+  combined_results <- NULL
 }
-  
 
+# Print or return the combined results
+
+if (nrow(combined_results)>=1){
+  BloodPressureQuery_Export <- as.data.frame(combined_results)
+  
+}
 
 #*****************************************************************************
 #* Remove all emply dataframe 
@@ -1085,29 +1133,34 @@ rm(list = names(empty)[empty])
 
 ## export 
 ## bind forms 
-out <- rbindlist(mget(ls(pattern = "*Query_Export$")), use.names = TRUE) 
+## Ensure all *_Query_Export objects have character columns before rbindlist
+query_exports <- mget(ls(pattern = "*Query_Export$"))
 
-# combine form/edit type var -- will have to do for each of forms that have duplicates 
-out <- add_column(out, Form_Edit_Type=paste(out$Form,"_",out$EditType))
+query_exports <- lapply(query_exports, function(df) {
+  df %>% mutate(across(everything(), as.character))
+})
 
-# confirm date class 
-out <- out %>% 
-  mutate(VisitDate = ymd(parse_date_time(VisitDate, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) 
+## Bind forms together
+out <- rbindlist(query_exports, use.names = TRUE, fill = TRUE)
 
-OutRangeCheck_query <- out
+## Add Form_Edit_Type column
+out <- out %>%
+  mutate(Form_Edit_Type = paste(Form, EditType, sep = "_"))
 
-## assign queryid -- 
-# edit type id for out of range is 05 
-# edit type id for invalid response option is 09
+## Parse VisitDate as Date
+out <- out %>%
+  mutate(VisitDate = parse_date_time(VisitDate, c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y")) %>% as_date())
 
-OutRangeCheck_query <- OutRangeCheck_query %>% 
-  mutate(QueryID = ifelse(EditType == "Invalid Response Option", paste0(Form, "_", VisitDate, "_",MomID, "_",`Variable Name`, "_", `Variable Value`, "_", "05"), 
-                          ifelse(EditType == "Out of Range", paste0(Form, "_", VisitDate, "_",MomID, "_", `Variable Name`, "_", `Variable Value`, "_", "09"),
-                                 ifelse(EditType == "Date Out of Range" & !is.na(MomID), paste0(Form, "_", VisitDate, "_",MomID, "_", `Variable Name`, "_", `Variable Value`, "_", "09"),     
-                                        ifelse(EditType == "Date Out of Range" & is.na(MomID), paste0(Form, "_", VisitDate, "_",ScrnID, "_", `Variable Name`, "_", `Variable Value`, "_", "09"), 
-                                               ifelse ( grepl("pressure|BP", EditType, ignore.case = TRUE),  paste0(Form, "_", VisitDate, "_",MomID, "_", `Variable Name`, "_", `Variable Value`, "_", "09"), NA) 
-                                        )))))
+## Assign QueryID based on EditType
+OutRangeCheck_query <- out %>%
+  mutate(QueryID = case_when(
+    EditType == "Invalid Response Option" ~ paste0(Form, "_", VisitDate, "_", MomID, "_", `Variable Name`, "_", `Variable Value`, "_", "05"),
+    EditType == "Out of Range" ~ paste0(Form, "_", VisitDate, "_", MomID, "_", `Variable Name`, "_", `Variable Value`, "_", "09"),
+    grepl("Date|VisitDate", EditType, ignore.case = TRUE) & !is.na(MomID) ~ paste0(Form, "_", VisitDate, "_", MomID, "_", `Variable Name`, "_", `Variable Value`, "_", "09"),
+    EditType == "Date Out of Range" & is.na(MomID) ~ paste0(Form, "_", VisitDate, "_", ScrnID, "_", `Variable Name`, "_", `Variable Value`, "_", "09"),
+    grepl("pressure|BP", EditType, ignore.case = TRUE) ~ paste0(Form, "_", VisitDate, "_", MomID, "_", `Variable Name`, "_", `Variable Value`, "_", "09"),
+    TRUE ~ NA_character_
+  ))
 
-# export out of range queries
-save(OutRangeCheck_query, file = paste0(path_to_save,"/OutRangeCheck_query.rda"))
-
+## Save output
+save(OutRangeCheck_query, file = paste0(path_to_save, "/queries/OutRangeCheck_query.rda"))
