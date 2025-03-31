@@ -31,24 +31,21 @@ library(data.table)
 library(lubridate)
 library(openxlsx)
 
-## UPDATE EACH RUN ## 
-# 1. Update "UploadDate" (this should match the folder name in synapse)
-# 2. Set "site" variable to the site you are running the query for 
-UploadDate = "2023-12-15"
-site = "India-CMC"
+# UPDATE EACH RUN: Update "UploadDate" (this should match the folder name in synapse)
+UploadDate = "2023-08-25"
 
-# 3. Set your main directory 
-maindir <- paste0("~/PRiSMAv2Data/", site,"/", UploadDate, "/queries", sep = "")
+# UPDATE EACH RUN: Set "site" variable to the site you are running the query for 
+site = "Kenya"
 
-#*****************************************************************************
-#* load data
-#*****************************************************************************
-## Load in wide data (we really only need MNH22 to filter out any protocol deviations)
-load(paste0("~/PRiSMAv2Data/", site, "/", UploadDate,"/data/", UploadDate, "_wide.Rdata", sep = "")) 
-#*****************************************************************************
-#* not all sites are reporting momid and pregid in mnh01 - this will cause some issues in this workflow 
-#* solution: merge in momid and pregid from MNH02 into MNH01 based on scrnid
-#*****************************************************************************
+# UPDATE EACH RUN: load in the WIDE data we generated from 00_DataImport code
+load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_wide.Rdata", sep = "")) 
+
+# UPDATE EACH RUN: load in the LONG data we generated from 00_DataImport code 
+load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = "")) 
+
+## UPDATE EACH RUN: set path to location where you want to save the query output below 
+path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries/"
+
 
 mnh02_ids <- mnh02 %>% select(SCRNID, MOMID, PREGID)
 
@@ -86,7 +83,8 @@ if (site=="India-CMC" | site=="India-SAS"){
     mutate(GA_US_DAYS = pmax(GA_US_DAYS_FTS1, GA_US_DAYS_FTS2, GA_US_DAYS_FTS3, GA_US_DAYS_FTS4, na.rm = TRUE)) %>% 
     ## convert to weeks 
     mutate(GA_US_WKS = GA_US_DAYS %/% 7) %>% 
-    mutate(US_OHOSTDAT = ymd(parse_date_time(US_OHOSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
+    mutate(GA_US_WKS = as.numeric(paste0(GA_US_WKS, ".", (GA_US_WKS-(GA_US_WKS*7))))) %>% 
+    mutate(US_OHOSTDAT = ymd(parse_date_time(US_OHOSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
     ## remove any unscheduled visit types
     filter(TYPE_VISIT != 13) %>% 
     # "zero out" GA and obtain the estimated "date of conception" 
@@ -110,16 +108,16 @@ if (site=="India-CMC" | site=="India-SAS"){
            GA_US_DAYS_FTS4 =  ifelse(US_GA_WKS_AGE_FTS4!= -7 & US_GA_DAYS_AGE_FTS4 != -7,  (US_GA_WKS_AGE_FTS4 * 7 + US_GA_DAYS_AGE_FTS4), NA)) %>% 
     mutate(GA_US_DAYS = pmax(GA_US_DAYS_FTS1, GA_US_DAYS_FTS2, GA_US_DAYS_FTS3, GA_US_DAYS_FTS4, na.rm = TRUE)) %>% 
     ## convert to weeks 
-    mutate(GA_US_WKS = GA_US_DAYS %/% 7) %>% 
-    mutate(US_OHOSTDAT = ymd(parse_date_time(US_OHOSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
+    mutate(GA_US_WKS = GA_US_DAYS %/% 7) %>%
+    mutate(GA_US_WKS = ifelse(!is.na(GA_US_WKS), paste0(GA_US_WKS, ".", (GA_US_DAYS-(GA_US_WKS*7))), NA),
+           GA_US_WKS = as.numeric(GA_US_WKS)) %>% 
+    mutate(US_OHOSTDAT = ymd(parse_date_time(US_OHOSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
     ## remove any unscheduled visit types
     filter(TYPE_VISIT != 13) %>% 
     # "zero out" GA and obtain the estimated "date of conception" 
     mutate(EST_CONCEP_DATE = US_OHOSTDAT - GA_US_DAYS) %>% 
     select(MOMID, PREGID, TYPE_VISIT, US_OHOSTDAT,GA_US_DAYS, GA_US_WKS, EST_CONCEP_DATE)
 }
-
-
 
 ## remove any duplicates -- these will be flagged in the duplicate id code
 out_dup_ids <- mnh01_sub[duplicated(mnh01_sub[,1:3]),]
@@ -129,37 +127,45 @@ mnh01_sub <- mnh01_sub %>% filter(!(MOMID %in% out_dup_ids))
 ## separate into 2 dataframes: one with GA at enrollment visit only -- we will use this to calculate GA at each visit.
 #  and one with the other visit types  
 mnh01_ga_at_enrl <- mnh01_sub %>% filter(TYPE_VISIT == 1) %>% select(-TYPE_VISIT)
-mnh01_sub <- mnh01_sub %>% filter(TYPE_VISIT != 1) %>% rename("VISITDATE" = "US_OHOSTDAT") %>% 
+mnh01_sub <- mnh01_sub %>% filter (TYPE_VISIT != 1) %>% rename("VISITDATE" = "US_OHOSTDAT") %>% 
   select(-c(GA_US_DAYS, GA_US_WKS, EST_CONCEP_DATE)) %>% 
   mutate(FORM = "MNH01")
 
 ## extract key variables from each of the forms that require visit type (MNH4, 5, 6, 7, 8, 12)
 mnh04_sub <- mnh04 %>% select(MOMID, PREGID, TYPE_VISIT, ANC_OBSSTDAT) %>% 
-  mutate(ANC_OBSSTDAT = ymd(parse_date_time(ANC_OBSSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
+  mutate(ANC_OBSSTDAT = ymd(parse_date_time(ANC_OBSSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
   rename("VISITDATE" = "ANC_OBSSTDAT") %>% 
   mutate(FORM = "MNH04")
 
 mnh05_sub <- mnh05 %>% select(MOMID, PREGID, TYPE_VISIT, ANT_PEDAT) %>%
-  mutate(ANT_PEDAT = ymd(parse_date_time(ANT_PEDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
+  mutate(ANT_PEDAT = ymd(parse_date_time(ANT_PEDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
   rename("VISITDATE" = "ANT_PEDAT") %>%
   mutate(FORM = "MNH05")
 
 mnh06_sub <- mnh06 %>% select(MOMID, PREGID, TYPE_VISIT, DIAG_VSDAT) %>% 
-  mutate(DIAG_VSDAT = ymd(parse_date_time(DIAG_VSDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
+  mutate(DIAG_VSDAT = ymd(parse_date_time(DIAG_VSDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
   rename("VISITDATE" = "DIAG_VSDAT") %>% 
   mutate(FORM = "MNH06")
 
 mnh07_sub <- mnh07 %>% select(MOMID, PREGID, TYPE_VISIT, MAT_SPEC_COLLECT_DAT) %>%
-  mutate(MAT_SPEC_COLLECT_DAT = ymd(parse_date_time(MAT_SPEC_COLLECT_DAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
+  mutate(MAT_SPEC_COLLECT_DAT = ymd(parse_date_time(MAT_SPEC_COLLECT_DAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
   rename("VISITDATE" = "MAT_SPEC_COLLECT_DAT") %>% 
   mutate(FORM = "MNH07")
 
-
-
 mnh08_sub <- mnh08 %>% select(MOMID, PREGID, TYPE_VISIT, LBSTDAT) %>% 
-  mutate(LBSTDAT = ymd(parse_date_time(LBSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
+  mutate(LBSTDAT = ymd(parse_date_time(LBSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
   rename("VISITDATE" = "LBSTDAT") %>% 
   mutate(FORM = "MNH08")
+
+mnh25_sub <- mnh25 %>% select(MOMID, PREGID, TYPE_VISIT, OBSSTDAT) %>% 
+  mutate (OBSSTDAT = ymd(parse_date_time(OBSSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
+  rename ("VISITDATE" = "OBSSTDAT") %>% 
+  mutate (FORM = "MNH25")
+
+mnh26_sub <- mnh26 %>% select(MOMID, PREGID, TYPE_VISIT, FTGE_OBSTDAT) %>% 
+  mutate(FTGE_OBSTDAT = ymd(parse_date_time(FTGE_OBSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
+  rename("VISITDATE" = "FTGE_OBSTDAT") %>% 
+  mutate(FORM = "MNH26")
 
 ## For MNH09: 
 # we need to extract the minimum delivery datetime in the event of a multiples pregnancy
@@ -171,10 +177,10 @@ if (site=="Kenya"){
                                 DELIV_DSSTDAT_INF3, DELIV_DSSTDAT_INF4,
                                 DELIV_DSSTTIM_INF1, DELIV_DSSTTIM_INF2, 
                                 DELIV_DSSTTIM_INF3, DELIV_DSSTTIM_INF4)  %>% 
-    mutate(DELIV_DSSTDAT_INF1 = ymd(parse_date_time(DELIV_DSSTDAT_INF1, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y"))),
-           DELIV_DSSTDAT_INF2 = ymd(parse_date_time(DELIV_DSSTDAT_INF2, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y"))),
-           DELIV_DSSTDAT_INF3 = ymd(parse_date_time(DELIV_DSSTDAT_INF3, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y"))),
-           DELIV_DSSTDAT_INF4 = ymd(parse_date_time(DELIV_DSSTDAT_INF4, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y"))),
+    mutate(DELIV_DSSTDAT_INF1 = ymd(parse_date_time(DELIV_DSSTDAT_INF1, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+           DELIV_DSSTDAT_INF2 = ymd(parse_date_time(DELIV_DSSTDAT_INF2, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+           DELIV_DSSTDAT_INF3 = ymd(parse_date_time(DELIV_DSSTDAT_INF3, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+           DELIV_DSSTDAT_INF4 = ymd(parse_date_time(DELIV_DSSTDAT_INF4, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
     ) %>% 
     # replace default value date with NA 
     mutate(DELIV_DSSTDAT_INF1 = replace(DELIV_DSSTDAT_INF1, DELIV_DSSTDAT_INF1==ymd("2007-07-07"), NA),
@@ -209,10 +215,10 @@ if (site=="Kenya"){
                                 DELIV_DSSTDAT_INF3, DELIV_DSSTDAT_INF4,
                                 DELIV_DSSTTIM_INF1, DELIV_DSSTTIM_INF2, 
                                 DELIV_DSSTTIM_INF3, DELIV_DSSTTIM_INF4)  %>% 
-    mutate(DELIV_DSSTDAT_INF1 = ymd(parse_date_time(DELIV_DSSTDAT_INF1, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y"))),
-           DELIV_DSSTDAT_INF2 = ymd(parse_date_time(DELIV_DSSTDAT_INF2, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y"))),
-           DELIV_DSSTDAT_INF3 = ymd(parse_date_time(DELIV_DSSTDAT_INF3, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y"))),
-           DELIV_DSSTDAT_INF4 = ymd(parse_date_time(DELIV_DSSTDAT_INF4, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y"))),
+    mutate(DELIV_DSSTDAT_INF1 = ymd(parse_date_time(DELIV_DSSTDAT_INF1, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+           DELIV_DSSTDAT_INF2 = ymd(parse_date_time(DELIV_DSSTDAT_INF2, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+           DELIV_DSSTDAT_INF3 = ymd(parse_date_time(DELIV_DSSTDAT_INF3, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+           DELIV_DSSTDAT_INF4 = ymd(parse_date_time(DELIV_DSSTDAT_INF4, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
     ) %>% 
     # replace default value date with NA 
     mutate(DELIV_DSSTDAT_INF1 = replace(DELIV_DSSTDAT_INF1, DELIV_DSSTDAT_INF1==ymd("1907-07-07"), NA),
@@ -244,7 +250,7 @@ if (site=="Kenya"){
 }
 
 mnh12_sub <- mnh12 %>% select(MOMID, PREGID, TYPE_VISIT, VISIT_OBSSTDAT) %>% 
-  mutate(VISIT_OBSSTDAT = ymd(parse_date_time(VISIT_OBSSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
+  mutate(VISIT_OBSSTDAT = ymd(parse_date_time(VISIT_OBSSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
   rename("VISITDATE" = "VISIT_OBSSTDAT") %>% 
   mutate(FORM = "MNH12")
 
@@ -253,7 +259,8 @@ mnh12_sub <- mnh12 %>% select(MOMID, PREGID, TYPE_VISIT, VISIT_OBSSTDAT) %>%
 #*****************************************************************************
 # bind rows of all forms except delivery and enrollment ultrasound
 maternal_all <- bind_rows(mnh01_sub, mnh04_sub, mnh05_sub,
-                          mnh06_sub,mnh07_sub,mnh08_sub) 
+                          mnh06_sub,mnh07_sub, mnh08_sub, 
+                          mnh25_sub, mnh26_sub) 
 
 ## Merge in enrollment ultrasound data 
 maternal_all <- left_join(maternal_all, mnh01_ga_at_enrl, by = c("MOMID", "PREGID"))
@@ -271,8 +278,10 @@ maternal_all <- left_join(maternal_all, mnh09_sub, by = c("MOMID", "PREGID"))
 anc_visits = c(1,2,3,4,5)
 maternal_all_anc = maternal_all %>% filter(TYPE_VISIT %in% anc_visits) %>% 
   mutate(GA_AT_VISIT_DAYS = as.numeric(VISITDATE - EST_CONCEP_DATE, na.rm= TRUE)) %>% 
-  ## convert to weeks
+  ## convert to weeks where 5.6 = 5 weeks, 6 days
   mutate(GA_AT_VISIT_WKS = GA_AT_VISIT_DAYS %/% 7) %>% 
+  mutate(GA_AT_VISIT_WKS = ifelse(!is.na(GA_AT_VISIT_WKS), paste0(GA_AT_VISIT_WKS, ".", (GA_AT_VISIT_DAYS-(GA_AT_VISIT_WKS*7))), NA),
+         GA_AT_VISIT_WKS = as.numeric(GA_AT_VISIT_WKS)) %>% 
   group_by(MOMID, PREGID) %>% 
   mutate(PERIOD = "ANC") %>% 
   rename("REPORTED_TYPE_VISIT" = "TYPE_VISIT") %>% 
@@ -295,7 +304,6 @@ maternal_all_anc = maternal_all %>% filter(TYPE_VISIT %in% anc_visits) %>%
   # if you enroll >17wks gestation, do you have an ANC20 visit when you are not required to have one -- these should not be queried
   mutate(UNEXPECTED_ANC20 = ifelse(REPORTED_TYPE_VISIT == 2 & PREV_VISIT_BINARY == 1 & (GA_US_DAYS >= 126 & GA_US_DAYS <140), 1, 0))
 #filter(UNEXPECTED_ANC20 != 1) ## we can filter here if we do not want to include these
-
 
 ## Extracting Visit type errors: 
 # generate new var if the reported visit is early or late compared to expected
@@ -329,7 +337,7 @@ if (dim(maternal_all_anc)[1] >= 1) {
     group_by(MOMID, PREGID, FORM) %>%
     mutate(REPORTED_TYPE_VISIT = as.numeric(REPORTED_TYPE_VISIT)) %>% 
     # generate variable if expected visit type already exists for the particpant
-    mutate(EXISTS_EXPECTED_TYPE_VISIT = ifelse(grepl(EXPECTED_TYPE_VISIT,ALL_REPORTED_VISITS), 1, 0)) %>% 
+    mutate(EXISTS_EXPECTED_TYPE_VISIT = ifelse(grepl(EXPECTED_TYPE_VISIT, ALL_REPORTED_VISITS), 1, 0)) %>% 
     # generate error message variable
     mutate(ERROR_MESSAGE = ifelse(EXPECTED_TYPE_VISIT == REPORTED_TYPE_VISIT, "no error",
                                   ifelse(VISITDATE == ymd("2007-07-07") | VISITDATE== ymd("1907-07-07"), "visit date is default value",
@@ -532,7 +540,7 @@ if (exists("mnh22")==TRUE){
 
 if (dim(MaternalVisitType_query_to_export)[1] > 0){
   
-  if (length(m22_ids_to_remove) >1){
+  if (exists("m22_ids_to_remove")){
     ## remove all IDs that have a visit type protocol deviation
     MaternalVisitType_query_to_export <- MaternalVisitType_query_to_export %>% filter(!MomID %in% m22_ids_to_remove)
   }
@@ -552,7 +560,7 @@ if (dim(MaternalVisitType_query_to_export)[1] > 0){
   
   MaternalVisitType_query <- MaternalVisitType_query_to_export
   ## export variable checking query 
-  save(MaternalVisitType_query, file = paste0(maindir,"/MaternalVisitType_query.rda"))
+  save(MaternalVisitType_query, file = paste0(path_to_save,"/MaternalVisitType_query.rda"))
   
 }
 
@@ -563,23 +571,30 @@ if (dim(MaternalVisitType_query_to_export)[1] > 0){
 # we want to flag these 
 #*****************************************************************************
 # ANC (using "maternal_all_anc" data frame generate above)
-if (exists("maternal_all_anc") == TRUE){
-  duplicate_visit_dates_anc <- maternal_all_anc %>% 
-    group_by(MOMID, PREGID, VISITDATE, FORM) %>% 
-    filter(VISITDATE != ymd("2007-07-07"),
-           VISITDATE != ymd("1907-07-07")) %>%
-    mutate(N = n()) %>% 
-    filter(N>1) %>% 
-    arrange(desc(MOMID), desc(VISITDATE), desc(FORM))
-}
+library(lubridate)
 
+# Check if maternal_all_anc exists
+if (exists("maternal_all_anc")) {
+  
+  # Ensure VISITDATE is in Date format
+  maternal_all_anc <- maternal_all_anc %>%
+    mutate(VISITDATE = as.Date(VISITDATE)) 
+  
+  # Identify duplicate visit dates excluding specific ones
+  duplicate_visit_dates_anc <- maternal_all_anc %>%
+    group_by(MOMID, PREGID, VISITDATE, FORM) %>%
+    filter(!VISITDATE %in% as.Date(c("2007-07-07", "1907-07-07", "1905-05-05"))) %>%  # Fix date filtering
+    mutate(N = n()) %>%
+    filter(N > 1) %>%
+    arrange(desc(MOMID), desc(VISITDATE), desc(FORM)) %>% filter 
+}
 # PNC (using "maternal_all_pnc" data frame generate above)
 if (exists("maternal_all_pnc") == TRUE){
   
   duplicate_visit_dates_pnc <- maternal_all_pnc %>% 
+    mutate(VISITDATE = as.Date(VISITDATE)) %>%
     group_by(MOMID, PREGID, VISITDATE, FORM) %>% 
-    filter(VISITDATE != ymd("2007-07-07"),
-           VISITDATE != ymd("1907-07-07")) %>%
+      filter(!VISITDATE %in% as.Date(c("2007-07-07", "1907-07-07", "1905-05-05"))) %>%  # Fix date filtering
     mutate(N = n()) %>% 
     filter(N>1) %>% 
     arrange(desc(MOMID), desc(VISITDATE), desc(FORM))
@@ -614,8 +629,6 @@ if (exists("duplicate_visit_dates_to_export")) {
            EDIT_TYPE = "Duplicate Visit Type") %>% 
     select(SCRNID, MOMID, PREGID, INFANTID,TYPE_VISIT, VISITDATE, FORM, VARIABLENAME, VARIABLEVALUE,FIELD_TYPE, EDIT_TYPE) 
   
-  # "Two different visit types exist on the same visit date"
-  
   # update naming 
   names(Duplicate_Visit_Dates_query_to_export) = c("ScrnID","MomID", "PregID","InfantID","VisitType", "VisitDate", "Form", "Variable Name",  "Variable Value","FieldType", "EditType")
   
@@ -634,7 +647,7 @@ if (exists("duplicate_visit_dates_to_export")) {
   
   Duplicate_Visit_Dates_query <- Duplicate_Visit_Dates_query_to_export
   ## export variable checking query 
-  save(Duplicate_Visit_Dates_query, file = paste0(maindir,"/DuplicateVisitDates_query.rda"))
+  save(Duplicate_Visit_Dates_query, file = paste0(path_to_save,"/DuplicateVisitDates_query.rda"))
   
 }
 
@@ -674,15 +687,16 @@ if (dim(visit_type_query_extra_tab)[1] >0){
     mutate(QueryID = paste0(Form, "_", VisitDate, "_",MomID, "_","TYPE_VISIT", "_", Reported_Type_Visit, "_", "06"))
   
   
-  if (length(m22_ids_to_remove) >0){
+  if (exists("m22_ids_to_remove")){
     ## remove all IDs that have a visit type protocol deviation
     visit_type_query_extra_tab <- visit_type_query_extra_tab %>% filter(!MomID %in% m22_ids_to_remove)
   }
   
   ## export 
-  save(visit_type_query_extra_tab, file = paste0(maindir,"/visit_type_extra_tab.rda"))
+  save(visit_type_query_extra_tab, file = paste0(path_to_save,"/visit_type_extra_tab.rda"))
   
 }
+
 
 #*****************************************************************************
 ## Additional GSED Query: 
@@ -754,12 +768,12 @@ if (exists("mnh09") == TRUE){
 
 if (exists("mnh08") == TRUE){
   
- remapp_ids <- mnh08 %>% filter (LB_REMAPP3 == 1 | BLEAD_LBPERF_1 == 1 | SCHISTO_LBPERF_1 == 1 |
-                                 SCHISTO_LBPERF_STOOL == 1 | HELM_LBPERF_1 == 1 | BLD_MORPH_LBPERF_1 == 1 |
-                                 BLD_MORPH_LBPERF_2 == 1 | BLD_MORPH_LBPERF_3 == 1| BLD_MORPH_LBPERF_4 == 1 ) %>% 
-                         select (MOMID, PREGID) %>% 
-                         distinct()
-   
+  remapp_ids <- mnh08 %>% filter (LB_REMAPP3 == 1 | BLEAD_LBPERF_1 == 1 | SCHISTO_LBPERF_1 == 1 |
+                                    SCHISTO_LBPERF_STOOL == 1 | HELM_LBPERF_1 == 1 | BLD_MORPH_LBPERF_1 == 1 |
+                                    BLD_MORPH_LBPERF_2 == 1 | BLD_MORPH_LBPERF_3 == 1| BLD_MORPH_LBPERF_4 == 1 ) %>% 
+    select (MOMID, PREGID) %>% 
+    distinct()
+  
 }
 
 #Function to rename variables
@@ -816,13 +830,14 @@ process_form <- function(form_name) {
       form_reordered <- form_cleaned %>%
         select(all_of(standard_names_v)) %>%
         mutate(
+          DATE_CHANGED = cleaned_dates <- gsub(" .*", "", VISIT_OBSSTDAT),
           VISITDATE = case_when(
             # Check if the first part of the date seems to be the day
-            grepl("^([0-2][0-9]|3[0-1])/([0-1][0-9])/", VISIT_OBSSTDAT) ~ dmy(VISIT_OBSSTDAT),
+            grepl("^([0-2][0-9]|3[0-1])/([0-1][0-9])/", DATE_CHANGED) ~ dmy(DATE_CHANGED),
             # Check if the first part of the date seems to be the month
-            grepl("^([0-1][0-9])/([0-2][0-9]|3[0-1])/", VISIT_OBSSTDAT) ~ mdy(VISIT_OBSSTDAT),
+            grepl("^([0-1][0-9])/([0-2][0-9]|3[0-1])/", DATE_CHANGED) ~ mdy(DATE_CHANGED),
             # Default to parsing with common formats
-            TRUE ~ ymd(parse_date_time(VISIT_OBSSTDAT, orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))
+            TRUE ~ ymd(parse_date_time(DATE_CHANGED, orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))
           ),
           VISITDATE = replace(VISITDATE, VISITDATE %in% c(ymd("1907-07-07"), ymd("1905-05-05"), ymd("2007-07-07")), NA),
           FORM_COMP = 1,
@@ -930,15 +945,16 @@ for (form in form_list) {
 
 # Combine all outputs and extras
 GSED_visit_query_output <- bind_rows(output_list)
-GSED_visit_query_extra <- bind_rows(extra_list)
+GSED_visit_query_extra <- bind_rows(extra_list) %>%
+mutate(QueryID = paste0(Form, "_", VisitDate, "_",MomID, "_", "TYPE_VISIT", "_", `Reported Visit Type`, "_", "06"))
 
 if (exists("GSED_visit_query_output") == TRUE) {
   
   ## add additional columns 
   GSED_visit_query_output_to_export = cbind(QueryID = NA, 
-                                      UploadDate = UploadDate, 
-                                      GSED_visit_query_output, 
-                                      DateEditReported = format(Sys.time(), "%Y-%m-%d"))
+                                            UploadDate = UploadDate, 
+                                            GSED_visit_query_output, 
+                                            DateEditReported = format(Sys.time(), "%Y-%m-%d"))
   
   # combine form/edit type var 
   GSED_visit_query_output_to_export$Form_Edit_Type <- paste(GSED_visit_query_output_to_export$Form,"_",GSED_visit_query_output_to_export$EditType)
@@ -949,8 +965,8 @@ if (exists("GSED_visit_query_output") == TRUE) {
   
   GSED_visit_query <- GSED_visit_query_output_to_export
   ## export variable checking query 
-  save(GSED_visit_query, file = paste0(maindir,"/GSEDVisitType_query.rda"))
-  save(GSED_visit_query_extra, file = paste0(maindir,"/GSEDVisitType_query_extra.rda"))
+  save(GSED_visit_query, file = paste0(path_to_save,"/GSEDVisitType_query.rda"))
+  save(GSED_visit_query_extra, file = paste0(path_to_save,"/GSEDVisitType_query_extra.rda"))
   
 } else { 
   print(paste0("No GSED Query for ", site))
