@@ -1,7 +1,8 @@
 #*****************************************************************************
 #*QUERY #4 -- VISIT TYPE QUERIES
 #* Written by: Stacie Loisate 
-#* Last updated: 26 February 2024
+#* Last Updated: 30 March 2025
+#* Updated the codes to new version
 
 #*Input: Wide data
 #*Function: check for visit types that do not match based on estimated gestational age at visit 
