@@ -32,17 +32,20 @@ library(growthstandards)
 ## UPDATE EACH RUN ## 
 # 1. Update "UploadDate" (this should match the folder name in synapse)
 # 2. Set "site" variable to the site you are running the query for 
-UploadDate = "2024-03-08"
-site = "India-SAS"
+# UPDATE EACH RUN:
+site = "Kenya"
 
-# 3. Set your main directory 
-maindir <- paste0("~/PRiSMAv2Data/", site,"/", UploadDate, sep = "")
+# UPDATE EACH RUN: Update "UploadDate" (this should match the folder name in synapse)
+UploadDate = "2023-08-25"
 
-#*****************************************************************************
-#* load data
-#*****************************************************************************
-## Load in wide data 
-load(paste0("~/PRiSMAv2Data/", site, "/", UploadDate,"/data/", UploadDate, "_wide.Rdata", sep = ""))
+# UPDATE EACH RUN: load in the WIDE data we generated from 00_DataImport code load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_wide.Rdata", sep = "")) 
+
+# UPDATE EACH RUN:load in the LONG data we generated from 00_DataImport code load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = "")) 
+
+
+# UPDATE EACH RUN: set path to location where you want to save the query output below 
+path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries/"
+
 
 ## if a site has all the forms needed for this query, the remainder of the code will run. if not, the code will stop
 if (exists("mnh01")== TRUE & exists("mnh09")== TRUE & exists("mnh11")== TRUE){
@@ -293,7 +296,7 @@ if (exists("SGA_query")== TRUE){
     mutate(QueryID = paste0(Form, "_", PregID, "_",InfantID, "_", `Variable Value`, "_", "11"))
   
   # Export data
-  save(SGA_query, file = paste0(maindir,"/queries/SGA_query.rda"))
+  save(SGA_query, file = paste0(path_to_save,"/queries/SGA_query.rda"))
   
 }
 
@@ -308,8 +311,5 @@ if (exists("sga_extra_tab")== TRUE){
     relocate(QueryID, .before = "MOMID")
   
   # Export data
-  save(sga_extra_tab, file = paste0(maindir,"/queries/sga_extra_tab.rda")) 
+  save(sga_extra_tab, file = paste0(path_to_save,"/queries/sga_extra_tab.rda")) 
 } 
-
-
-
