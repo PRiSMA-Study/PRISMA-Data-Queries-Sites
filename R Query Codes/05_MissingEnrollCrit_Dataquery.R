@@ -41,10 +41,10 @@ site = "Kenya"
 # UPDATE EACH RUN: Update "UploadDate" (this should match the folder name in synapse)
 UploadDate = "2023-08-25"
 
-# UPDATE EACH RUN: load in the WIDE data we generated from 00_DataImport code -- for duplicates
+# UPDATE EACH RUN: load in the WIDE data we generated from 00_DataImport code 
 load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_wide.Rdata", sep = "")) 
 
-# UPDATE EACH RUN:load in the LONG data we generated from 00_DataImport code -- for protocol checks 
+# UPDATE EACH RUN:load in the LONG data we generated from 00_DataImport code 
 load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = "")) 
 
 
