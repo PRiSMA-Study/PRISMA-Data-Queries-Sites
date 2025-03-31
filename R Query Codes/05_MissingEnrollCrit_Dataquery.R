@@ -10,7 +10,8 @@
 #*****************************************************************************
 #* Items to Update before running script 
 #* You can copy and paste "UPDATE EACH RUN" to find where to update 
-#* Last updated: 13 Feb 2025 
+#* Last Updated: 30 March 2025
+#* Updated the codes to new version
 #* 
 #* Changes to the eligibility reason query
 #* Changes the variable for MOMID missing enrolment form to PREGID
