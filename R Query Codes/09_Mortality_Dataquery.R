@@ -23,13 +23,6 @@ library(dplyr)
 library(data.table)
 library(lubridate)
 
-## UPDATE EACH RUN ## 
-# 1. Update "UploadDate" (this should match the folder name in synapse)
-# 2. Set "site" variable to the site you are running the query for 
-UploadDate = "2024-03-08"
-site = "India-SAS"
-
-
 # UPDATE EACH RUN:
 site = "Kenya"
 
