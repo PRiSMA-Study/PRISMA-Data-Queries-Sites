@@ -1,7 +1,8 @@
 #*****************************************************************************
 #*QUERY #1 -- CHECK FOR CORE VARIABLE NAMES 
 #* Written by: Stacie Loisate & Xiaoyan Hu
-#* Last updated: 25 February 2025
+#* Last Updated: 30 March 2025
+#* Updated the codes to new version
 
 #*Input: Wide data (all raw .csv files)
 #*Function: check to make sure all variables exist in the data and match data dictionary formatting 
