@@ -617,7 +617,7 @@ if (nrow(mom_closeout_long) > 0) {
 #*****************************************************************************
 #MNH37 Query: 
 #1. To check if there is correct COD Identified
-#2. To confirm if 
+#2. To confirm if COD is missing 
 #*****************************************************************************
 cod_df_1 <- mnh37 %>%
   { if (!"VA_TYPE" %in% names(.)) mutate(., VA_TYPE = NA) else . } %>%
