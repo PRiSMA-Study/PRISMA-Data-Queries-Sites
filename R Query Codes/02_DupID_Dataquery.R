@@ -1,7 +1,8 @@
 #*****************************************************************************
 #*QUERY #2 -- CHECK FOR DUPLICATE IDs
 #* Written by: Stacie Loisate & Xiaoyan Hu
-#* Last updated: 22 February 2025
+#* Last Updated: 30 March 2025
+#* Updated the codes to new version
 
 #*Input: Wide data (all raw .csv files) & Long data 
 #*Functions: 
