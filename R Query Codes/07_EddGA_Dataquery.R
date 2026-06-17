@@ -234,12 +234,13 @@ EDD_query_comments <- EDD_query_comments %>%
   mutate_all(as.character)
 
 if (nrow(EDD_query_comments) >= 1) {
-  save(EDD_query_comments, file = "EDD_query_comments.rda")
+  save(EDD_query_comments,  file = paste0(path_to_save, "EDD_query_comments.rda"))
+  
 } 
 
 # Save the EDD_query dataframe as an .rda file
 if (nrow(EDD_query) >= 1) {
-  save(EDD_query, file = "EDD_query.rda")
+  save(EDD_query,  file = paste0(path_to_save, "EDD_query.rda"))
 } 
 
 
@@ -635,10 +636,9 @@ if (exists("delivery_query") == TRUE) {
   LabourDelivery_query <- delivery_query_to_export
   
   ## export variable checking query
-  save(LabourDelivery_query, file = "LabourDelivery_query.rda")
-  
-  save(LabourDelivery_query_extra, file = "LabourDelivery_query_comments.rda")
-  
+  save(LabourDelivery_query,  file = paste0(path_to_save, "LabourDelivery_query.rda"))
+  save(LabourDelivery_query_extra,  file = paste0(path_to_save,"LabourDelivery_query_comments.rda"))
+
   print ("Labour and Delivery Query Ran Succesfully")
   
 } else { 
