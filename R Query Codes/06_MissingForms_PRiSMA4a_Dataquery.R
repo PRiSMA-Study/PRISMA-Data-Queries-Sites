@@ -41,11 +41,12 @@ load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = 
 path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries/"
 
 setwd(path_to_save)
+
 #Step 0 - if MOMID or PREGID is not present in MNH01, we want to transfer the MOMID and PREGIDs from MNH02 into MNH01 by SCRNID
 
 #Check for different variations of "N/A" in the MOMID column
 
-na_variations <- c("n/a", "NA", "N/A", "na", NA, "")
+na_variations <- c("n/a", "", "N/A", "na", "NA", " ")
 
 if (sum(mnh01$MOMID %in% na_variations | is.na(mnh01$MOMID), na.rm = TRUE) > 2) {
   # If more than ten MOMID values match the variations of "N/A",
@@ -72,17 +73,19 @@ mnh01$CAL_EDD_BRTHDAT_FTS1 <- ymd(parse_date_time(mnh01$CAL_EDD_BRTHDAT_FTS1, c(
 mnh01$CAL_EDD_BRTHDAT_FTS2 <- ymd(parse_date_time(mnh01$CAL_EDD_BRTHDAT_FTS2, c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))
 mnh01$CAL_EDD_BRTHDAT_FTS3 <- ymd(parse_date_time(mnh01$CAL_EDD_BRTHDAT_FTS3, c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))
 mnh01$CAL_EDD_BRTHDAT_FTS4 <- ymd(parse_date_time(mnh01$CAL_EDD_BRTHDAT_FTS4, c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))
+mnh02$SCRN_OBSSTDAT <- ymd(parse_date_time(mnh02$SCRN_OBSSTDAT,c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))
 
-#Calculating GA and choosing the "latest" possible GA 
+#Calculating GA and choosing the "latest" possible GA ----
 India_Sites <- c("India_CMC", "India-CMC", "India_SAS", "India-SAS")
 
 if (!(site %in% India_Sites)) { 
-  mnh01_mod <- mnh01 %>% mutate (GA_US_DAYS_FTS1 =  ifelse(US_GA_WKS_AGE_FTS1!= -7 & US_GA_DAYS_AGE_FTS1 != -7,  (US_GA_WKS_AGE_FTS1 * 7 + US_GA_DAYS_AGE_FTS1), NA), 
-                                 GA_US_DAYS_FTS2 =  ifelse(US_GA_WKS_AGE_FTS2!= -7 & US_GA_DAYS_AGE_FTS2 != -7,  (US_GA_WKS_AGE_FTS2 * 7 + US_GA_DAYS_AGE_FTS2), NA),
-                                 GA_US_DAYS_FTS3 =  ifelse(US_GA_WKS_AGE_FTS3!= -7 & US_GA_DAYS_AGE_FTS3 != -7,  (US_GA_WKS_AGE_FTS3 * 7 + US_GA_DAYS_AGE_FTS3), NA),
-                                 GA_US_DAYS_FTS4 =  ifelse(US_GA_WKS_AGE_FTS4!= -7 & US_GA_DAYS_AGE_FTS4 != -7,  (US_GA_WKS_AGE_FTS4 * 7 + US_GA_DAYS_AGE_FTS4), NA),
-                                 GA_US_DAYS = pmax(GA_US_DAYS_FTS1, GA_US_DAYS_FTS2, GA_US_DAYS_FTS3, GA_US_DAYS_FTS4, na.rm = TRUE),
-                                 GA_DAYS = pmax(GA_US_DAYS_FTS1, GA_US_DAYS_FTS2, GA_US_DAYS_FTS3, GA_US_DAYS_FTS4,  na.rm = TRUE )) 
+  mnh01_mod <- mnh01 %>% filter (TYPE_VISIT == 1) %>%
+    mutate(GA_US_DAYS_FTS1 =  ifelse(US_GA_WKS_AGE_FTS1!= -7 & US_GA_DAYS_AGE_FTS1 != -7,  (US_GA_WKS_AGE_FTS1 * 7 + US_GA_DAYS_AGE_FTS1), NA), 
+           GA_US_DAYS_FTS2 =  ifelse(US_GA_WKS_AGE_FTS2!= -7 & US_GA_DAYS_AGE_FTS2 != -7,  (US_GA_WKS_AGE_FTS2 * 7 + US_GA_DAYS_AGE_FTS2), NA),
+           GA_US_DAYS_FTS3 =  ifelse(US_GA_WKS_AGE_FTS3!= -7 & US_GA_DAYS_AGE_FTS3 != -7,  (US_GA_WKS_AGE_FTS3 * 7 + US_GA_DAYS_AGE_FTS3), NA),
+           GA_US_DAYS_FTS4 =  ifelse(US_GA_WKS_AGE_FTS4!= -7 & US_GA_DAYS_AGE_FTS4 != -7,  (US_GA_WKS_AGE_FTS4 * 7 + US_GA_DAYS_AGE_FTS4), NA),
+           GA_US_DAYS = pmax(GA_US_DAYS_FTS1, GA_US_DAYS_FTS2, GA_US_DAYS_FTS3, GA_US_DAYS_FTS4, na.rm = TRUE),
+           GA_DAYS = pmax(GA_US_DAYS_FTS1, GA_US_DAYS_FTS2, GA_US_DAYS_FTS3, GA_US_DAYS_FTS4,  na.rm = TRUE )) 
   
   #Choosing the earliest EDD Date, for multiple pregnancies
   mnh01_mod <- mnh01_mod %>% mutate(US_EDD_BRTHDAT_FTS1 = replace(US_EDD_BRTHDAT_FTS1, US_EDD_BRTHDAT_FTS1== ymd("1907-07-07") | US_EDD_BRTHDAT_FTS1== ymd("2007-07-07") , NA), 
@@ -96,7 +99,7 @@ if (!(site %in% India_Sites)) {
   mnh01_mod$EDD <- ymd(parse_date_time(mnh01_mod$EDD, c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))
   # Filter all participants that met the inclusion criteria in MNH process M02 data
   Eligible <- mnh02 %>% filter (CONSENT_IEORRES == 1 & AGE_IEORRES == 1  & PC_IEORRES == 1  & CATCHMENT_IEORRES == 1  & CATCH_REMAIN_IEORRES == 1 ) %>%
-    mutate (Eligible = 1) %>% select(SCRNID, Eligible)  %>%
+    mutate (Eligible = 1) %>% select(SCRNID, Eligible, SCRN_OBSSTDAT)  %>%
     distinct(SCRNID, .keep_all = TRUE)
   
   #Step 0.5a:Developing a Masterlist of Enrolled Individuals
@@ -107,20 +110,54 @@ if (!(site %in% India_Sites)) {
   Enroled <- merge(Screened, Eligible, by = c("SCRNID"))  %>% select (-c("TYPE_VISIT"))  %>%
     distinct(MOMID, PREGID, .keep_all = TRUE)
   
-  #Use the Ultrasound GA to calculate An Estimated EDD (EDD_EST)
-  EDD <- Enroled %>%
-    mutate( UPLOADDT = as.Date(UploadDate),
-            EST_CONC_DATE = US_OHOSTDAT - days(GA_DAYS), 
-            EDD_EST = EST_CONC_DATE + days(280), 
-            DIFF = abs(as.numeric(difftime(EDD, EDD_EST, units = "days")))) %>%
-    select( MOMID, SCRNID, PREGID, VisitDate = US_OHOSTDAT, EDD,
-            UPLOADDT, EDD_EST, GA_DAYS, EST_CONC_DATE, DIFF) %>%
-    distinct(MOMID, PREGID, .keep_all = TRUE) %>% filter (GA_DAYS < 175)
-  
-  Enrolled <- Enroled %>% mutate(GA_TODAY = round(GA_DAYS + as.numeric(difftime(UploadDate, US_OHOSTDAT, units = "days"))))  %>%
-    filter (GA_TODAY >= 139) 
-  
-} 
+  if (site == "Pakistan") {
+    
+    #Use the Ultrasound GA to calculate An Estimated EDD (EDD_EST)
+    EDD <- Enroled %>%
+      mutate( 
+        UploadDate = as.Date(UploadDate),
+        UPLOADDT = as.Date(UploadDate) - 14, # Pakistan site reporting uploading data from 7 days ago - giving two weeks buffer
+        EST_CONC_DATE = US_OHOSTDAT - days(GA_DAYS), 
+        EDD_EST = EST_CONC_DATE + days(280), 
+        DIFF = abs(as.numeric(difftime(EDD, EDD_EST, units = "days"))),
+        GA_ENROL = as.numeric(difftime(SCRN_OBSSTDAT, EST_CONC_DATE, units = "days"))
+      ) %>%
+      select( 
+        MOMID, SCRNID, PREGID, VisitDate = US_OHOSTDAT, EDD,
+        UPLOADDT, EDD_EST, GA_DAYS, EST_CONC_DATE, DIFF, GA_ENROL, 
+        ESTIMATED_EDD_SCDAT 
+      ) %>%
+      distinct(MOMID, PREGID, .keep_all = TRUE) %>%
+      filter(GA_ENROL < 175)
+    
+    Enrolled <- EDD %>%
+      rename(US_OHOSTDAT = VisitDate )  %>%
+      mutate(GA_TODAY = round(GA_DAYS + as.numeric(difftime(UploadDate, US_OHOSTDAT, units = "days"))))  %>%
+      filter (GA_ENROL >= 139)   
+    
+  } else { 
+    
+    
+    #Use the Ultrasound GA to calculate An Estimated EDD (EDD_EST)
+    EDD <- Enroled %>%
+      mutate( UPLOADDT = as.Date(UploadDate),
+              EST_CONC_DATE = US_OHOSTDAT - days(GA_DAYS), 
+              EDD_EST = EST_CONC_DATE + days(280), 
+              DIFF = abs(as.numeric(difftime(EDD, EDD_EST, units = "days"))),
+              GA_ENROL = as.numeric(difftime(SCRN_OBSSTDAT, EST_CONC_DATE, units = "days")),
+              VisitDate = US_OHOSTDAT) %>%
+      select( MOMID, SCRNID, PREGID, VisitDate, US_OHOSTDAT, EDD,
+              UPLOADDT, EDD_EST, GA_DAYS, EST_CONC_DATE, DIFF, GA_ENROL,
+              ESTIMATED_EDD_SCDAT) %>%
+      distinct(MOMID, PREGID, .keep_all = TRUE) %>% filter (GA_ENROL < 175)
+    
+    Enrolled <- Enroled %>% 
+      #rename(US_OHOSTDAT = VisitDate )  %>%
+      mutate(GA_TODAY = round(GA_DAYS + as.numeric(difftime(UploadDate, US_OHOSTDAT, units = "days"))))  %>%
+      filter (GA_TODAY >= 139) 
+    
+  } 
+}
 
 if (site %in% India_Sites) {
   mnh01_mod <- mnh01 %>% 
@@ -141,7 +178,7 @@ if (site %in% India_Sites) {
   mnh01_mod$EDD <- ymd(parse_date_time(mnh01_mod$EDD, c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))
   # Filter all participants that met the inclusion criteria in MNH process M02 data
   Eligible <- mnh02 %>% filter (CONSENT_IEORRES == 1 & AGE_IEORRES == 1  & PC_IEORRES == 1  & CATCHMENT_IEORRES == 1  & CATCH_REMAIN_IEORRES == 1 ) %>%
-    mutate (Eligible = 1) %>% select(SCRNID, Eligible)  %>%
+    mutate (Eligible = 1) %>% select(SCRNID, Eligible, SCRN_OBSSTDAT)  %>%
     distinct(SCRNID, .keep_all = TRUE)
   
   #Step 0.5a:Developing a Masterlist of Enrolled Individuals
@@ -158,19 +195,23 @@ if (site %in% India_Sites) {
             UPLOADDT = UploadDate - 15, #India site reporting uploading data from 15days ago
             EST_CONC_DATE = US_OHOSTDAT - days(GA_DAYS), 
             EDD_EST = EST_CONC_DATE + days(280), 
-            DIFF = abs(as.numeric(difftime(EDD, EDD_EST, units = "days")))) %>%
+            DIFF = abs(as.numeric(difftime(EDD, EDD_EST, units = "days"))),
+            GA_ENROL = as.numeric(difftime(SCRN_OBSSTDAT, EST_CONC_DATE, units = "days"))) %>%
     select( MOMID, SCRNID, PREGID, VisitDate = US_OHOSTDAT, EDD,
-            UPLOADDT, EDD_EST, GA_DAYS, EST_CONC_DATE, DIFF) %>%
+            UPLOADDT, EDD_EST, GA_DAYS, EST_CONC_DATE, DIFF, GA_ENROL,
+            ESTIMATED_EDD_SCDAT) %>%
     distinct(MOMID, PREGID, .keep_all = TRUE) %>% filter (GA_DAYS < 175)
   
-  Enrolled <- Enroled %>% mutate(GA_TODAY = round(GA_DAYS + as.numeric(difftime(UploadDate, US_OHOSTDAT, units = "days"))))  %>%
-    filter (GA_TODAY >= 139) 
+  Enrolled <- EDD %>% 
+    rename(US_OHOSTDAT = VisitDate )  %>%
+    mutate(GA_TODAY = round(GA_DAYS + as.numeric(difftime(UploadDate, US_OHOSTDAT, units = "days"))))  %>%
+    filter (GA_ENROL >= 139) 
 }
 
 
 #**************************************************************************************************************
 #PART B: MISSING FORM QUERY
-# Create date bounds to get a lower bound and upper bound visit time period
+# Create date bounds to get a lower bound and upper bound visit time period ----
 edd_date <- EDD %>%
   mutate(
     LW20 = EST_CONC_DATE + days(160), 
@@ -182,14 +223,14 @@ edd_date <- EDD %>%
     UP32 = EST_CONC_DATE + days(237), 
     UP36 = EST_CONC_DATE + days(272)) %>% 
   select(MOMID, PREGID, VisitDate, UPLOADDT, EDD, EDD_EST, GA_DAYS, DIFF, EST_CONC_DATE,
-         LW20, LW28, LW32, LW36, UP20, UP28, UP32, UP36) %>%  
+         LW20, LW28, LW32, LW36, UP20, UP28, UP32, UP36, GA_ENROL) %>%  
   mutate(MOMID = ifelse(MOMID %in% na_variations, NA, MOMID),
          PREGID = ifelse(PREGID %in% na_variations, NA, PREGID)) %>%
   filter(complete.cases(MOMID, PREGID)) %>%
   distinct(MOMID, PREGID, .keep_all = TRUE)
 
 #Create a due dates for ANC20, 3, 4, 5 timeline based on the calculations FALSE - not due, TRUE - due period, 2 - past due
-edd_date$DUE20 <- ifelse ((edd_date$UPLOADDT > edd_date$UP20) & (edd_date$GA_DAYS <= 125), TRUE, FALSE) 
+edd_date$DUE20 <- ifelse ((edd_date$UPLOADDT > edd_date$UP20) & (edd_date$GA_ENROL <= 125), TRUE, FALSE) 
 edd_date$DUE28 <- ifelse (edd_date$UPLOADDT > edd_date$UP28, TRUE, FALSE)
 edd_date$DUE32 <- ifelse (edd_date$UPLOADDT > edd_date$UP32, TRUE, FALSE)
 edd_date$DUE36 <- ifelse (edd_date$UPLOADDT > edd_date$UP36, TRUE, FALSE)
@@ -199,10 +240,12 @@ if (exists("mnh09")==TRUE){
   mnh09$MAT_LD_OHOSTDAT <- ymd(parse_date_time(mnh09$MAT_LD_OHOSTDAT, 
                                                c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y")))
   
+  mnh09$DELIV_DSSTDAT_INF1 <- ymd(parse_date_time(mnh09$DELIV_DSSTDAT_INF1, 
+                                                  c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y")))
   # Left join mnh09 with EDD, calculate gestational age (GA_DELIV), and categorize prematurity status
   delivered_moms <- mnh09 %>% 
     left_join(EDD, by = c("MOMID", "PREGID")) %>% 
-    mutate(GA_DELIV = 280 - (as.integer(difftime(EDD, MAT_LD_OHOSTDAT, units = "days"))),
+    mutate(GA_DELIV = 280 - (as.integer(difftime(EDD, DELIV_DSSTDAT_INF1, units = "days"))),
            Delivered = 1,
            Premies = case_when(
              GA_DELIV <= 181 ~ "Yes_20",
@@ -275,7 +318,8 @@ if (exists("mnh09")==TRUE){
       UP26 = MAT_DELIVERY_DATE + 279, # 26 to 28 weeks window
       UP52 = MAT_DELIVERY_DATE + 454, # 52 to 54 weeks window
       VisitDate = MAT_LD_OHOSTDAT,
-      UPLOADDT = UploadDate) %>%  
+      UploadDate = as.Date(UploadDate),
+      UPLOADDT = UploadDate - 14)  %>%  #Pakistan site reporting uploading data from 7 days ago, adding 2 weeks buffer
     select(MOMID, PREGID, INFANTID_INF1, INFANTID_INF2, INFANTID_INF3, INFANTID_INF4,
            MAT_DELIVERY_DATE, VisitDate, UPLOADDT, UP00, UP01, UP04, UP06, UP26, UP52) %>%  
     distinct(MOMID, PREGID, .keep_all = TRUE)
@@ -288,6 +332,13 @@ if (exists("mnh09")==TRUE){
   due_mat_inf$DUE26 <- ifelse (due_mat_inf$UPLOADDT > due_mat_inf$UP26, TRUE, FALSE)
   due_mat_inf$DUE52 <- ifelse (due_mat_inf$UPLOADDT > due_mat_inf$UP52, TRUE, FALSE)
   
+  
+  #Create MAT_CENS_INF files 
+  maternal_delivery_date <- due_mat_inf %>% 
+    mutate (DELIVERED = 1) %>% 
+    select(MOMID, PREGID, MAT_DELIVERY_DATE, DELIVERED) %>%  
+    distinct(MOMID, PREGID, .keep_all = TRUE)
+  
   # Pivot infant delivery data into long format
   infant_dob <- mnh09_sub %>%
     pivot_longer(cols = starts_with("INFANTID") | starts_with("DELIVERY_DATETIME") | starts_with("BIRTH_DSTERM") | starts_with("SEX"), 
@@ -295,7 +346,7 @@ if (exists("mnh09")==TRUE){
                  names_pattern = "(.*)_INF(\\d)") %>%
     rename(INFANTID = INFANTID, DOB = DELIVERY_DATETIME) %>%
     select(MOMID, PREGID, INFANTID, DOB, BIRTH_DSTERM, SEX) %>%
-    filter(INFANTID != "" & INFANTID != "n/a")
+    filter(INFANTID != " " & INFANTID != "n/a")
   
   #living infant
   inf_live <- infant_dob %>% filter (BIRTH_DSTERM == 1)
@@ -307,7 +358,7 @@ if (exists("mnh09")==TRUE){
       LW00 = as.Date(DOB) + 3,   # 3 to 5 days window
       LW01 = as.Date(DOB) + 7,  # 7 to 14 days window
       LW04 = as.Date(DOB) + 28,  # 28 to 35 days window
-
+      
       # Ensure DOB is treated as a Date object and add days for each visit window
       UP00 = as.Date(DOB) + 5,   # 3 to 5 days window
       UP01 = as.Date(DOB) + 14,  # 7 to 14 days window
@@ -317,15 +368,20 @@ if (exists("mnh09")==TRUE){
       UP52 = as.Date(DOB) + 454, # 52 to 54 weeks window
       BILI_STARTDATE = case_when(
         site == "Ghana" ~ Sys.Date(),  # Today's date for Ghana
-        site %in% c( "India-CMC", "India_CMC") ~ as.Date("2024-11-13"),
-        site %in% c( "India-SAS", "India_SAS") ~ as.Date("2024-12-03"),
+        site %in% c("India-CMC", "India_CMC") ~ as.Date("2024-11-13"),
+        site %in% c("India-SAS", "India_SAS") ~ as.Date("2024-12-03"),
         site == "Kenya" ~ as.Date("2025-01-13"),
         site == "Pakistan" ~ as.Date("2024-10-24"),
         site == "Zambia" ~ as.Date("2024-11-04"),
-        TRUE ~ NA_Date_ ),
-      UPLOADDT = UploadDate) %>%
-    select(MOMID, PREGID, INFANTID, DOB, UPLOADDT, BILI_STARTDATE, starts_with("UP"), starts_with("LW")) %>%
+        TRUE ~ NA_Date_
+      ),
+      BILI_ENDDATE = as.Date("2026-01-31"), # Universal end date
+      UploadDate = as.Date(UploadDate),
+      UPLOADDT = UploadDate - 14) %>%
+    select(MOMID, PREGID, INFANTID, DOB, UPLOADDT, BILI_STARTDATE, BILI_ENDDATE, starts_with("UP"), starts_with("LW")) %>%
     distinct(INFANTID, PREGID, .keep_all = TRUE)
+  
+  
   
   due_inf$DUE00 <- ifelse (due_inf$UPLOADDT > due_inf$UP00, TRUE, FALSE)
   due_inf$DUE01 <- ifelse (due_inf$UPLOADDT > due_inf$UP01, TRUE, FALSE)
@@ -334,11 +390,26 @@ if (exists("mnh09")==TRUE){
   due_inf$DUE26 <- ifelse (due_inf$UPLOADDT > due_inf$UP26, TRUE, FALSE)
   due_inf$DUE52 <- ifelse (due_inf$UPLOADDT > due_inf$UP52, TRUE, FALSE)
   
-  
-  due_inf$DUE00_BILI <- ifelse (due_inf$BILI_STARTDATE < due_inf$LW00, TRUE, FALSE)
-  due_inf$DUE01_BILI <- ifelse (due_inf$BILI_STARTDATE < due_inf$LW01, TRUE, FALSE)
-  due_inf$DUE04_BILI <- ifelse (due_inf$BILI_STARTDATE < due_inf$LW04, TRUE, FALSE)
 
+  
+    bili_inf <- read_excel(paste0("Z:/QueryReports/Bilirulerparticipants_260610.xlsx")) %>%
+      filter(
+        (site %in% c("India-CMC", "India_CMC") & SITE %in% c("India-CMC", "India_CMC")) |
+          (site %in% c("India-SAS", "India_SAS") & SITE %in% c("India-SAS", "India_SAS")) |
+          (SITE == site) # Handles Ghana, Kenya, Pakistan, Zambia normally
+      )
+  
+  due_inf$DUE00_BILI <- ifelse(
+    due_inf$BILI_STARTDATE < due_inf$LW00 & due_inf$LW00 <= due_inf$BILI_ENDDATE & due_inf$INFANTID %in% bili_inf$INFANTID, 
+    TRUE, FALSE)
+  due_inf$DUE01_BILI <- ifelse(
+    due_inf$BILI_STARTDATE < due_inf$LW01 & due_inf$LW01 <= due_inf$BILI_ENDDATE & due_inf$INFANTID %in% bili_inf$INFANTID, 
+    TRUE, FALSE)
+  due_inf$DUE04_BILI <- ifelse(
+    due_inf$BILI_STARTDATE < due_inf$LW04 & due_inf$LW04 <= due_inf$BILI_ENDDATE & due_inf$INFANTID %in% bili_inf$INFANTID, 
+    TRUE, FALSE)
+
+  
 }
 
 if (exists("mnh23")==TRUE){
@@ -348,6 +419,7 @@ if (exists("mnh23")==TRUE){
   
   censored_moms <- mnh23 %>%
     left_join(EDD, by = c("MOMID", "PREGID")) %>%
+    left_join(maternal_delivery_date, by = c("MOMID", "PREGID")) %>%
     mutate(
       CLOSE_DSSTDAT = if_else(CLOSE_DSSTDAT %in% c(ymd("1907-07-07"), ymd("2007-07-07")), NA_Date_, CLOSE_DSSTDAT),
       DTHDAT = if_else(DTHDAT %in% c(ymd("1907-07-07"), ymd("2007-07-07")), NA_Date_, DTHDAT),
@@ -356,24 +428,45 @@ if (exists("mnh23")==TRUE){
     mutate(
       GA_CEN = ifelse(!is.na(GA_DAYS) & !is.na(CLOSE_DAT) & !is.na(VisitDate),
                       GA_DAYS + (as.integer(difftime(CLOSE_DAT, VisitDate, units = "days"))), NA),
+      INF_CEN = ifelse(DELIVERED == 1  & !is.na(MAT_DELIVERY_DATE) & !is.na(CLOSE_DAT),
+                      (as.integer(difftime(CLOSE_DAT, MAT_DELIVERY_DATE, units = "days"))), NA),
       Censored = 1,
-      Cen_Time = case_when(
+      Cen_Time_GA = case_when(
         is.na (CLOSE_DSSTDAT) ~ "Missing",  # Handle missing values
-        GA_CEN >= 273 ~ "No",
         GA_CEN <= 181 ~ "Yes_20",
         GA_CEN >= 182 & GA_CEN <= 216 ~ "Yes_28",
         GA_CEN >= 217 & GA_CEN <= 237 ~ "Yes_32",
         GA_CEN >= 238 & GA_CEN <= 272 ~ "Yes_36",
+        (is.na(DELIVERED) & GA_CEN > 273) ~ "No",
+        TRUE ~ "Remove_All"),
+      
+      Cen_Time_Age = case_when(
+        is.na (CLOSE_DSSTDAT) ~ "Missing",  # Handle missing values  
+        INF_CEN <= 7 ~ "Yes_P0",
+        INF_CEN > 7 & INF_CEN <= 28 ~ "Yes_P1",
+        INF_CEN > 28 & INF_CEN <= 35 ~ "Yes_P4",
+        INF_CEN > 35 & INF_CEN <= 104 ~ "Yes_P6",
+        INF_CEN > 104 & INF_CEN <= 279 ~ "Yes_P26",
+        INF_CEN > 279 & INF_CEN <= 454 ~ "Yes_P52",
+        INF_CEN >= 455 ~ "No",
         TRUE ~ "Remove_All"
       )
     ) %>%
-    select(MOMID, PREGID, GA_CEN, Censored, Cen_Time, GA_DAYS, VisitDate, CLOSE_DSSTDAT, DTHDAT, CLOSE_DAT )
+    select(MOMID, PREGID, GA_CEN, INF_CEN, DELIVERED, MAT_DELIVERY_DATE, 
+           Censored, Cen_Time_GA ,Cen_Time_Age, GA_DAYS, 
+           VisitDate, CLOSE_DSSTDAT, DTHDAT, CLOSE_DAT )
   
   
-  cens_20_ <- censored_moms %>% filter(censored_moms$Cen_Time %in% c("Remove_All", "Yes_20")) %>% select(MOMID, PREGID)
-  cens_28_ <- censored_moms %>% filter(censored_moms$Cen_Time %in% c("Remove_All","Yes_20", "Yes_28")) %>% select(MOMID, PREGID)
-  cens_32_ <- censored_moms %>% filter(censored_moms$Cen_Time %in% c("Remove_All","Yes_20", "Yes_28", "Yes_32")) %>% select(MOMID, PREGID)
-  cens_36_ <- censored_moms %>% filter(censored_moms$Cen_Time %in% c("Remove_All","Yes_20", "Yes_28", "Yes_32", "Yes_36")) %>% select(MOMID, PREGID)
+  cens_20_ <- censored_moms %>% filter(censored_moms$Cen_Time_GA %in% c("Remove_All", "Yes_20")) %>% select(MOMID, PREGID)
+  cens_28_ <- censored_moms %>% filter(censored_moms$Cen_Time_GA %in% c("Remove_All","Yes_20", "Yes_28")) %>% select(MOMID, PREGID)
+  cens_32_ <- censored_moms %>% filter(censored_moms$Cen_Time_GA %in% c("Remove_All","Yes_20", "Yes_28", "Yes_32")) %>% select(MOMID, PREGID)
+  cens_36_ <- censored_moms %>% filter(censored_moms$Cen_Time_GA %in% c("Remove_All","Yes_20", "Yes_28", "Yes_32", "Yes_36")) %>% select(MOMID, PREGID)
+  cens_p0_ <- censored_moms %>% filter(censored_moms$Cen_Time_Age %in% c("Remove_All","Yes_P0")) %>% select(MOMID, PREGID)
+  cens_p1_ <- censored_moms %>% filter(censored_moms$Cen_Time_Age %in% c("Remove_All","Yes_P0", "Yes_P1")) %>% select(MOMID, PREGID)
+  cens_p4_ <- censored_moms %>% filter(censored_moms$Cen_Time_Age %in% c("Remove_All","Yes_P0", "Yes_P1", "Yes_P4")) %>% select(MOMID, PREGID)
+  cens_p6_ <- censored_moms %>% filter(censored_moms$Cen_Time_Age %in% c("Remove_All","Yes_P0", "Yes_P1", "Yes_P4", "Yes_P6")) %>% select(MOMID, PREGID)
+  cens_p26_ <- censored_moms %>% filter(censored_moms$Cen_Time_Age %in% c("Remove_All","Yes_P0", "Yes_P1", "Yes_P4", "Yes_P6", "Yes_P26")) %>% select(MOMID, PREGID)
+  cens_p52_ <- censored_moms %>% filter(censored_moms$Cen_Time_Age %in% c("Remove_All","Yes_P0", "Yes_P1", "Yes_P4", "Yes_P6", "Yes_P26", "Yes_P52" )) %>% select(MOMID, PREGID)
   
 }
 
@@ -397,12 +490,12 @@ if (exists("mnh24")==TRUE){
       Age = as.integer(difftime(CLOSE_DAT, DOB, units = "days")), # Calculate age in days
       cens_time = case_when(
         is.na(CLOSE_DSSTDAT) ~ "Missing",
-        Age < 3 ~ "PNC0",
-        Age >= 3 & Age < 7 ~ "PNC1",
-        Age >= 7 & Age < 28 ~ "PNC4",
-        Age >= 28 & Age < 42 ~ "PNC6",
-        Age >= 42 & Age < 182 ~ "PNC26",
-        Age >= 182 & Age <= 454 ~ "PNC52",
+        Age <= 7 ~ "PNC0",
+        Age > 7 & Age <= 28 ~ "PNC1",
+        Age > 28 & Age <= 35 ~ "PNC4",
+        Age > 35 & Age <= 104 ~ "PNC6",
+        Age > 104 & Age <= 279 ~ "PNC26",
+        Age > 279 & Age <= 454 ~ "PNC52",
         Age >= 455 ~ "No",
         TRUE ~ "Remove_All"))
   
@@ -475,7 +568,7 @@ if (exists("mnh04")==TRUE) {
 }
 
 
-#Create a ReMAPP expected list for each site
+#Create a ReMAPP expected list for each site ----
 
 ReMapp_df <- Enrolled %>%
   mutate( 
@@ -490,11 +583,15 @@ ReMapp_df <- Enrolled %>%
     ),
     
     ReMAPPEnd = case_when(
-      site == "Pakistan" ~ as.Date("2024-04-05"),
+      site == "Pakistan" ~ as.Date("2024-01-17"),
       site == "Ghana" ~ as.Date("2024-10-29"),
+      site == "Kenya" ~ as.Date("2024-01-17"),
+      site == "Zambia" ~ as.Date("2025-08-01"),
+      site %in% c("India-CMC", "India_CMC") ~ as.Date("2025-08-01"),
+      site %in% c("India-SAS", "India_SAS") ~ as.Date("2025-03-06"),
       TRUE ~ as.Date(UploadDate) # Ensure UploadDate is a Date
     ),
-    ReMAPP = ifelse(US_OHOSTDAT >= ReMAPPDate & US_OHOSTDAT < ReMAPPEnd, 1, 0)
+    ReMAPP = ifelse( US_OHOSTDAT >= ReMAPPDate & US_OHOSTDAT < ReMAPPEnd, 1, 0)
   ) %>% select (-GA_TODAY)
 
 # Create vector of PREGID values where ReMAPP == 1
@@ -502,11 +599,11 @@ ReMAPPEnrolled <- ReMapp_df %>%
   filter(ReMAPP == 1) 
 
 if (exists("mnh25")) {
-
+  
   mnh25$OBSSTDAT  <- ymd(parse_date_time(mnh25$OBSSTDAT , c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y")))
   
   mnh25_df <- mnh25 %>% 
-   left_join(ReMAPPEnrolled, by = c("MOMID", "PREGID")) %>% 
+    left_join(ReMAPPEnrolled, by = c("MOMID", "PREGID")) %>% 
     left_join(mnh09_sub %>% select(MOMID, PREGID, MAT_DELIVERY_DATE), by = c("MOMID", "PREGID")) %>% 
     left_join(miscarriage %>% select(MOMID, PREGID, FETAL_LOSS_DSDECOD, FETAL_LOSS_DSSTDAT), by = c("MOMID", "PREGID")) %>% 
     mutate(
@@ -520,18 +617,18 @@ if (exists("mnh25")) {
           round(as.numeric(difftime(OBSSTDAT, FETAL_LOSS_DSSTDAT, units = "days"))),
         TRUE ~ NA ),
       DELIVERED = ifelse((!is.na(MAT_DELIVERY_DATE) & OBSSTDAT >= MAT_DELIVERY_DATE) |
-                        ( !is.na(FETAL_LOSS_DSSTDAT) & OBSSTDAT >= FETAL_LOSS_DSSTDAT), 1, 0)) %>%  
-  mutate(
-    EST_TYPE_VISIT = case_when(
-      TYPE_VISIT == 10 | (TYPE_VISIT == 14 & AGE_TODAY >= 42 & AGE_TODAY <= 104 & DELIVERED == 1) ~ 10, 
-      TYPE_VISIT %in% c(1,2) | (TYPE_VISIT == 13 & GA_TODAY <= 181 & DELIVERED == 0) ~ 2,
-      TYPE_VISIT %in% c(4,5) | (TYPE_VISIT == 13 & GA_TODAY >= 217 & GA_TODAY <= 310 & DELIVERED == 0) ~ 4, 
-      TRUE ~ 55)) %>% 
-  filter(TYPE_VISIT %in% c(2,4,10,13,14)) %>%  # Ensure proper filtering
-  select( MOMID, PREGID, OBSSTDAT, TYPE_VISIT, EST_TYPE_VISIT, MAT_VITAL_MNH25,
-          MAT_VISIT_MNH25, MAT_VISIT_OTHR_MNH25, US_OHOSTDAT, EDD, GA_DAYS,
-          ESTIMATED_EDD_SCDAT, MAT_DELIVERY_DATE, FETAL_LOSS_DSSTDAT, DELIVERED,
-          FETAL_LOSS_DSDECOD, GA_TODAY, AGE_TODAY)
+                           ( !is.na(FETAL_LOSS_DSSTDAT) & OBSSTDAT >= FETAL_LOSS_DSSTDAT), 1, 0)) %>%  
+    mutate(
+      EST_TYPE_VISIT = case_when(
+        TYPE_VISIT == 10 | (TYPE_VISIT == 14 & AGE_TODAY >= 42 & AGE_TODAY <= 104 & DELIVERED == 1) ~ 10, 
+        TYPE_VISIT %in% c(1,2) | (TYPE_VISIT == 13 & GA_TODAY <= 181 & DELIVERED == 0) ~ 2,
+        TYPE_VISIT %in% c(4,5) | (TYPE_VISIT == 13 & GA_TODAY >= 217 & GA_TODAY <= 310 & DELIVERED == 0) ~ 4, 
+        TRUE ~ 55)) %>% 
+    filter(TYPE_VISIT %in% c(1,2,4,10,13,14)) %>%  # Ensure proper filtering
+    select( MOMID, PREGID, OBSSTDAT, TYPE_VISIT, EST_TYPE_VISIT, MAT_VITAL_MNH25,
+            MAT_VISIT_MNH25, MAT_VISIT_OTHR_MNH25, US_OHOSTDAT, EDD, GA_DAYS,
+            ESTIMATED_EDD_SCDAT, MAT_DELIVERY_DATE, FETAL_LOSS_DSSTDAT, DELIVERED,
+            FETAL_LOSS_DSDECOD, GA_TODAY, AGE_TODAY)
   
 }
 
@@ -540,6 +637,7 @@ if (exists("mnh26")) {
   mnh26$FTGE_OBSTDAT  <- ymd(parse_date_time(mnh26$FTGE_OBSTDAT , c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y")))
   
   mnh26_df <- mnh26 %>% 
+    select(MOMID, PREGID, TYPE_VISIT, FTGE_OBSTDAT, MAT_VISIT_MNH26, MAT_VITAL_MNH26, MAT_VISIT_OTHR_MNH26) %>%
     left_join(ReMAPPEnrolled, by = c("MOMID", "PREGID")) %>% 
     left_join(mnh09_sub %>% select(MOMID, PREGID, MAT_DELIVERY_DATE), by = c("MOMID", "PREGID")) %>% 
     left_join(miscarriage %>% select(MOMID, PREGID, FETAL_LOSS_DSDECOD, FETAL_LOSS_DSSTDAT), by = c("MOMID", "PREGID")) %>% 
@@ -561,7 +659,7 @@ if (exists("mnh26")) {
         TYPE_VISIT %in% c(1,2) | (TYPE_VISIT == 13 & GA_TODAY <= 181 & DELIVERED == 0) ~ 2,
         TYPE_VISIT %in% c(4,5) | (TYPE_VISIT == 13 & GA_TODAY >= 217 & GA_TODAY <= 310 & DELIVERED == 0) ~ 4, 
         TRUE ~ 55)) %>% 
-    filter(TYPE_VISIT %in% c(2,4,10,13,14)) %>%  # Ensure proper filtering
+    filter(TYPE_VISIT %in% c(1,2,4,5,10,13,14)) %>%  # Ensure proper filtering
     select( MOMID, PREGID, FTGE_OBSTDAT, TYPE_VISIT, EST_TYPE_VISIT, MAT_VITAL_MNH26,
             MAT_VISIT_MNH26, MAT_VISIT_OTHR_MNH26, US_OHOSTDAT, EDD, GA_DAYS,
             ESTIMATED_EDD_SCDAT, MAT_DELIVERY_DATE, FETAL_LOSS_DSSTDAT, DELIVERED,
@@ -570,7 +668,7 @@ if (exists("mnh26")) {
 }
 
 
-# Create data frames for different due times
+# Create data frames for different due times for anc visits----
 due20_df <- edd_date %>%
   select (-c("DUE28", "DUE32", "DUE36")) %>%
   filter (DUE20 == TRUE)  %>%
@@ -604,6 +702,61 @@ due36_df <- edd_date %>%
   anti_join(miss_36_d, by = c("MOMID", "PREGID")) %>%
   anti_join(miss_36_, by = c("MOMID", "PREGID"))   
 
+# Create data frames for different due times for mom pnc visits----
+
+make_due_df <- function(data, due_flag, cens_df, select_vars) {
+  data %>%
+    filter(.data[[due_flag]] == TRUE) %>%
+    anti_join(cens_df, by = c("MOMID", "PREGID")) %>%   # UPDATED
+    arrange(MOMID, PREGID, DOB) %>%                     # earliest DOB
+    distinct(MOMID, PREGID, .keep_all = TRUE) %>%       # keep first record per mother-preg
+    select(all_of(select_vars))
+}
+
+due00_df_mat <- make_due_df(
+  data      = due_inf,
+  due_flag  = "DUE00",
+  cens_df   = cens_p0_,
+  select_vars = c("MOMID", "PREGID", "INFANTID", "UPLOADDT", "DOB", "DUE00", "DUE00_BILI")
+)
+
+due01_df_mat <- make_due_df(
+  data      = due_inf,
+  due_flag  = "DUE01",
+  cens_df   = cens_p1_,
+  select_vars = c("MOMID", "PREGID", "INFANTID", "UPLOADDT", "DOB", "DUE01", "DUE01_BILI")
+)
+
+due04_df_mat <- make_due_df(
+  data      = due_inf,
+  due_flag  = "DUE04",
+  cens_df   = cens_p4_,
+  select_vars = c("MOMID", "PREGID", "INFANTID", "UPLOADDT", "DOB", "DUE04", "DUE04_BILI")
+)
+
+due06_df_mat <- make_due_df(
+  data      = due_inf,
+  due_flag  = "DUE06",
+  cens_df   = cens_p6_,
+  select_vars = c("MOMID", "PREGID", "INFANTID", "UPLOADDT", "DOB", "DUE06")
+)
+
+due26_df_mat <- make_due_df(
+  data      = due_inf,
+  due_flag  = "DUE26",
+  cens_df   = cens_p26_,
+  select_vars = c("MOMID", "PREGID", "INFANTID", "UPLOADDT", "DOB", "DUE26")
+)
+
+due52_df_mat <- make_due_df(
+  data      = due_inf,
+  due_flag  = "DUE52",
+  cens_df   = cens_p52_,
+  select_vars = c("MOMID", "PREGID", "INFANTID", "UPLOADDT", "DOB", "DUE52")
+)
+
+
+# Create data frames for different due times for infant pnc visits----
 due00_df <- due_inf %>%
   filter (DUE00 == TRUE) %>%
   distinct(MOMID, PREGID, INFANTID, .keep_all = TRUE) %>%
@@ -640,7 +793,9 @@ due52_df <- due_inf %>%
   anti_join(cens_52_, by = c("PREGID", "INFANTID")) %>% 
   select (MOMID, PREGID, INFANTID, UPLOADDT, DOB, DUE52)
 
-#Begin query for MNH01 to find missing
+# MISSING ANC FORMS  ----
+
+##MNH01 - ENROLMENT, ANC32 ----
 ## Because there are some enrolled individuals that are missing mnh01 forms
 
 Enrol_01 <- mnh01  %>% filter(TYPE_VISIT == 1) %>% select(MOMID, PREGID, MAT_VISIT_MNH01) %>% distinct(MOMID, PREGID, .keep_all = TRUE)
@@ -681,7 +836,7 @@ Missing_01_32 <- due32_df %>% left_join (ANC32_01, by = c("MOMID", "PREGID")) %>
   filter(!(PREGID %in% ANC36_ids)) %>%
   select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, EDD, Varname, Variable_Value, Form, Query)
 
-#MNH03 - ENROLMENT
+##MNH03 - ENROLMENT ----
 #There should only be one form per participant, hence the distinct MOMID code 
 #We want to identify forms that are not present, or have a default value in the MAT_Visit Variable
 Missing_03 <- Enrolled %>% 
@@ -700,8 +855,7 @@ Missing_03 <- Enrolled %>%
   filter(Query != FALSE) %>%
   select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, EDD, Varname, Variable_Value, Form, Query) %>% mutate_all(as.character)
 
-#MNH04 
-#ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36
+##MNH04 ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36  ----
 #MNH04 - ENROLMENT
 Enrol_04 <- mnh04  %>% filter(TYPE_VISIT == 1) %>% select(MOMID, PREGID, MAT_VISIT_MNH04, ANC_OBSSTDAT) %>% distinct(MOMID, PREGID, .keep_all = TRUE)
 
@@ -788,9 +942,9 @@ Missing_04_36 <- due36_df %>% left_join (ANC36_04, by = c("MOMID", "PREGID")) %>
   filter(!(Query %in% c(FALSE, "Not Due")))%>%
   select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, EDD, Varname, Variable_Value, Form, Query)
 
-#MNH05 - ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36
+##MNH05 - ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36  ----
 
-#MNH05 - ENROLMENT
+#MNH05 - ENROLMENT 
 Enrol_05 <- mnh05  %>% filter(TYPE_VISIT == 1) %>% select(MOMID, PREGID, MAT_VISIT_MNH05, ANT_PEDAT) %>% distinct(MOMID, PREGID, .keep_all = TRUE)
 
 Miss_enrol_05 <- Enrolled %>% left_join (Enrol_05, by = c("MOMID", "PREGID")) %>%
@@ -875,9 +1029,9 @@ Missing_05_36 <- due36_df %>% left_join (ANC36_05, by = c("MOMID", "PREGID")) %>
   filter(!(Query %in% c(FALSE, "Not Due")))%>%
   select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, EDD, Varname, Variable_Value, Form, Query)
 
-#MNH06 - ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36
+##MNH06 - ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36  ----
 
-#MNH06 - ENROLMENT
+#MNH06 - ENROLMENT 
 Enrol_06 <- mnh06  %>% filter(TYPE_VISIT == 1) %>% select(MOMID, PREGID, MAT_VISIT_MNH06, DIAG_VSDAT) %>% distinct(MOMID, PREGID, .keep_all = TRUE)
 
 Miss_enrol_06 <- Enrolled %>% left_join (Enrol_06, by = c("MOMID", "PREGID")) %>% 
@@ -962,7 +1116,7 @@ Missing_06_36 <- due36_df %>% left_join (ANC36_06, by = c("MOMID", "PREGID")) %>
   filter(!(Query %in% c(FALSE, "Not Due")))%>%
   select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, EDD, Varname, Variable_Value, Form, Query)
 
-#MNH07 - ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36
+##MNH07 - ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36 ----
 
 #MNH07 ENROLMENT
 Enrol_07 <- mnh07  %>% filter(TYPE_VISIT == 1) %>% select(MOMID, PREGID, MAT_VISIT_MNH07, MAT_SPEC_COLLECT_DAT) %>% distinct(MOMID, PREGID, .keep_all = TRUE)
@@ -1050,7 +1204,7 @@ Missing_07_36 <- due36_df %>% left_join (ANC36_07, by = c("MOMID", "PREGID")) %>
   select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, EDD, Varname, Variable_Value, Form, Query)
 
 
-#MNH08 - ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36
+##MNH08 - ENROLMENT, ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC28, ANC32, ANC36 ----
 #MNH08 - ENROLMENT
 Enrol_08 <- mnh08  %>% filter(TYPE_VISIT == 1) %>% select(MOMID, PREGID, MAT_VISIT_MNH08, LBSTDAT) %>% distinct(MOMID, PREGID, .keep_all = TRUE)
 
@@ -1135,7 +1289,7 @@ Missing_08_36 <- due36_df %>% left_join (ANC36_08, by = c("MOMID", "PREGID")) %>
   select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, EDD, Varname, Variable_Value, Form, Query)
 
 
-##MNH25 - ANC20, ANC32
+## MNH25 - ANC20, ANC32 ----
 #MNH25 - ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC32
 
 #MNH25 - ANC 20 (For those who need to have ANC20 done)
@@ -1180,14 +1334,14 @@ Missing_25_32 <- due32_df %>% filter (PREGID %in% ReMAPPEnrolled$PREGID) %>%
 
 
 
-#MNH26 - ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC32
+##MNH26 - ANC20 (for selected persons i.e. if they were less than 18wks at enrolment), ANC32 ----
 
 #MNH26 - ANC 20 (For those who need to have ANC20 done)
-ANC20_26 <- mnh26_df  %>% filter(EST_TYPE_VISIT == 2) %>% 
-                          select(MOMID, PREGID, MAT_VISIT_MNH26, FTGE_OBSTDAT) 
+ANC20_26 <- mnh26_df  %>% filter(EST_TYPE_VISIT %in% c(1,2)) %>% 
+  select(MOMID, PREGID, MAT_VISIT_MNH26, FTGE_OBSTDAT) 
 
 Missing_26_20 <- due20_df %>% filter (PREGID %in% ReMAPPEnrolled$PREGID) %>% 
-                              left_join (ANC20_26, by = c("MOMID", "PREGID")) %>%
+  left_join (ANC20_26, by = c("MOMID", "PREGID")) %>%
   mutate(
     Query = ifelse(MAT_VISIT_MNH26 %in% c(1, 2, 3, 4, 5, 6, 7, 8, 88), FALSE,
                    ifelse(DUE20 == FALSE, "Not Due",
@@ -1199,11 +1353,12 @@ Missing_26_20 <- due20_df %>% filter (PREGID %in% ReMAPPEnrolled$PREGID) %>%
     VisitDate = FTGE_OBSTDAT,
     VisitType = "2", 
     Varname = "MAT_VISIT_MNH26") %>%
+  filter (LW20 < as.Date("2025-01-06"))%>%
   filter(!(Query %in% c(FALSE, "Not Due")))%>%
   select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, EDD, Varname, Variable_Value, Form, Query)
 
 #MNH26 - ANC 32
-ANC32_26 <- mnh26_df  %>% filter(EST_TYPE_VISIT == 4) %>% 
+ANC32_26 <- mnh26_df  %>% filter(EST_TYPE_VISIT %in% c(4,5)) %>% 
   select(MOMID, PREGID, MAT_VISIT_MNH26, FTGE_OBSTDAT) 
 
 Missing_26_32 <- due32_df %>% filter (PREGID %in% ReMAPPEnrolled$PREGID) %>% 
@@ -1219,11 +1374,12 @@ Missing_26_32 <- due32_df %>% filter (PREGID %in% ReMAPPEnrolled$PREGID) %>%
     VisitDate = FTGE_OBSTDAT,
     VisitType = "4", 
     Varname = "MAT_VISIT_MNH26") %>%
+  filter (LW32 < as.Date("2025-01-06"))%>%
   filter(!(Query %in% c(FALSE, "Not Due")))%>%
   select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, EDD, Varname, Variable_Value, Form, Query)
 
 
-# Combine all anc missing forms data
+## Binding all anc missing forms ----
 # List of dataframes to check
 df_list_anc <- c("Miss_enrol_01", "Missing_01_32", "Missing_03", "Miss_enrol_04", "Missing_04_20",
                  "Missing_04_28", "Missing_04_32", "Missing_04_36", "Miss_enrol_05", 
@@ -1290,17 +1446,17 @@ if (nrow(all_anc_missing) > 0) {
     combined_query <- all_missing_label
   }
   
-  #Bind all Missing Forms
+  ##Exporting all missing ANC Forms ----
   MatMissingForms_query <- combined_query  %>% 
     mutate(UploadDate = UploadDate, 
-           ScrnID = "NA",
+           ScrnID = NA,
            `Variable Name` = Varname,
            `Variable Value` = Variable_Value,
-           InfantID = "NA",
-           FieldType = "NA",  
+           InfantID = NA,
+           FieldType = NA,  
            MomID = MOMID,
            PregID = PREGID,
-           VisitDate = "NA",
+           VisitDate = NA,
            DateEditReported = format(Sys.time(), "%Y-%m-%d"),
            Form_Edit_Type = paste(Form,"_", EditType),
            QueryID = paste0(MomID, "_", UploadDate, "_", EditType, "_", "05" ) 
@@ -1308,8 +1464,8 @@ if (nrow(all_anc_missing) > 0) {
     select ( QueryID, UploadDate, ScrnID, MomID, PregID, InfantID, VisitType, VisitDate, Form, 
              'Variable Name', 'Variable Value', FieldType, EditType, DateEditReported, Form_Edit_Type)
   
-  save(MatMissingForms_query, file = "MatMissingForms_query.rda") 
-  
+
+  save(MatMissingForms_query, file = paste0(path_to_save,"MatMissingForms_query.rda"))
   
   #create comments to specify missing forms
   missingEDD <- missing_forms_merged %>% left_join(EDD, by = c ("MOMID","PREGID" )) %>% 
@@ -1319,29 +1475,50 @@ if (nrow(all_anc_missing) > 0) {
   MatMissingFormsQuery_comments <- missingEDD %>% 
     mutate( `GA at Upload Date` = round(GA_DAYS + as.numeric(difftime(UploadDate, VisitDate, units = "days"))),
             QueryID = paste0(MOMID, "_", UploadDate, "_", EditType, "_", "05" ))  %>% 
-    rename(`GA at Enrolment` = GA_DAYS, `Enrolment Date` = VisitDate, `Missing Forms` = Missing_Forms)
+    rename(`GA at Enrolment` = GA_DAYS, `Enrolment Date` = VisitDate, `Missing Forms` = Missing_Forms) %>% 
+    mutate(GW_Comment = NA_character_)
+ 
+  closeout_miss <- censored_moms %>% 
+    filter (Cen_Time_GA == "Missing") 
   
-    closeout_miss <- censored_moms %>% 
-    filter (Cen_Time == "Missing") 
-  
-  if (nrow(closeout_miss) > 0) {   
-    closeout_miss <- closeout_miss %>% 
-      mutate(GW_Comment = "MomID Missing MNH23 Closeout Date") %>% 
-      select(MOMID, PREGID, GW_Comment)
+  # If there are any closeout misses, attach the Closeout comment
+  if (nrow(closeout_miss) > 0) {
+    
+    closeout_comments <- closeout_miss %>%
+      transmute(
+        MOMID,
+        PREGID,
+        GW_Comment_closeout = "MomID Missing MNH23 Closeout Date"
+      )
     
     MatMissingFormsQuery_comments <- MatMissingFormsQuery_comments %>%
-     left_join(closeout_miss, by = c("MOMID", "PREGID"))
+      left_join(closeout_comments,
+                by = c("MOMID", "PREGID")) %>%
+      mutate(
+        # If GW_Comment already existed, keep it; otherwise use the closeout one
+        GW_Comment = coalesce(GW_Comment, GW_Comment_closeout)
+      ) %>%
+      select(-GW_Comment_closeout)
     
-    if (nrow (miscarriage_miss) > 0) {
+    # If there are miscarriage misses, attach those too
+    if (exists("miscarriage_miss") && nrow(miscarriage_miss) > 0) {
+      
+      miss_add <- miscarriage_miss %>%
+        select(MOMID, PREGID, GW_Comment_miscarriage = GW_Comment)
+      
       MatMissingFormsQuery_comments <- MatMissingFormsQuery_comments %>%
-        left_join(miscarriage_miss, by = c("MOMID", "PREGID","GW_Comment"))
+        left_join(miss_add,
+                  by = c("MOMID", "PREGID")) %>%
+        mutate(
+          # Prefer any existing comment; otherwise use the miscarriage one
+          GW_Comment = coalesce(GW_Comment, GW_Comment_miscarriage)
+        ) %>%
+        select(-GW_Comment_miscarriage)
     }
     
-  }  else {MatMissingFormsQuery_comments <- MatMissingFormsQuery_comments %>% mutate (GW_Comment = "")}
-
+  } 
   
-  save(MatMissingFormsQuery_comments, file = "MatMissingFormsQuery_comments.rda") 
-  
+  save(MatMissingFormsQuery_comments, file = paste0(path_to_save,"MatMissingFormsQuery_comments.rda"))
   print("All ANC Forms Combined")
   
   
@@ -1352,10 +1529,10 @@ if (nrow(all_anc_missing) > 0) {
 }
 
 
-##MISSING PNC FORMS 
+#MISSING PNC FORMS  ----
 
 #Create Loops for every visit for each form
-
+##MNH05 - TYPE_VISIT %IN% C(10,11,12)----
 if (exists("mnh05")) {
   
   #Loop MNH05 Missing Forms (TYPE-VISIT %in% c(10,11,12))
@@ -1389,9 +1566,9 @@ if (exists("mnh05")) {
   
   # Define the visit types and corresponding due dataframes and due variables
   visit_types <- list(
-    list("visit_type" = 10, "suffix" = 6, "due_df" = due06_df, "due_var" = "DUE06"),
-    list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df, "due_var" = "DUE26"),
-    list("visit_type" = 12, "suffix" = 52, "due_df" = due52_df, "due_var" = "DUE52")
+    list("visit_type" = 10, "suffix" = 6, "due_df" = due06_df_mat, "due_var" = "DUE06"),
+    list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df_mat, "due_var" = "DUE26"),
+    list("visit_type" = 12, "suffix" = 52, "due_df" = due52_df_mat, "due_var" = "DUE52")
   )
   
   # Generate the missing reports using lapply
@@ -1405,6 +1582,8 @@ if (exists("mnh05")) {
   
 } else {print ("MNH05 dataset not uploaded")}
 
+
+##MNH06 - TYPE_VISIT %IN% C(7,8,9,10,11,12) ----
 if (exists("mnh06")) {
   
   #Loop MNH06 Missing Forms (TYPE-VISIT %in% c(7,8,9,10,11,12))
@@ -1434,12 +1613,12 @@ if (exists("mnh06")) {
   }
   
   visit_types <- list(
-    list("visit_type" = 7, "suffix" = 0, "due_df" = due00_df, "due_var" = "DUE00"),
-    list("visit_type" = 8, "suffix" = 1, "due_df" = due01_df, "due_var" = "DUE01"),
-    list("visit_type" = 9, "suffix" = 4, "due_df" = due04_df, "due_var" = "DUE04"),
-    list("visit_type" = 10,"suffix" = 6,"due_df" = due06_df, "due_var" = "DUE06"),
-    list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df, "due_var" = "DUE26"),
-    list("visit_type" = 12, "suffix" = 52, "due_df" = due52_df, "due_var" = "DUE52")
+    list("visit_type" = 7, "suffix" = 0, "due_df" = due00_df_mat, "due_var" = "DUE00"),
+    list("visit_type" = 8, "suffix" = 1, "due_df" = due01_df_mat, "due_var" = "DUE01"),
+    list("visit_type" = 9, "suffix" = 4, "due_df" = due04_df_mat, "due_var" = "DUE04"),
+    list("visit_type" = 10,"suffix" = 6,"due_df" = due06_df_mat, "due_var" = "DUE06"),
+    list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df_mat, "due_var" = "DUE26"),
+    list("visit_type" = 12, "suffix" = 52, "due_df" = due52_df_mat, "due_var" = "DUE52")
   )
   
   missing_reports <- lapply(visit_types, function(v) {
@@ -1450,6 +1629,7 @@ if (exists("mnh06")) {
   
 } else {print ("MNH06 dataset not uploaded")}
 
+##MNH07 - TYPE_VISIT %IN% C(10,11) ----
 if (exists("mnh07")) {
   
   # Loop MNH07 Missing Forms (TYPE-VISIT %in% c(10,11))
@@ -1482,11 +1662,24 @@ if (exists("mnh07")) {
     return(result)
   }
   
+  if (site == "Ghana") {
+    # Define the visit types and corresponding due dataframes and due variables
+    visit_types <- list(
+      list("visit_type" = 7, "suffix" = 0, "due_df" = due00_df_mat, "due_var" = "DUE00"),
+      list("visit_type" = 8, "suffix" = 1, "due_df" = due01_df_mat, "due_var" = "DUE01"),
+      list("visit_type" = 9, "suffix" = 4, "due_df" = due04_df_mat, "due_var" = "DUE04"),
+      list("visit_type" = 10,"suffix" = 6,"due_df" = due06_df_mat, "due_var" = "DUE06"),
+      list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df_mat, "due_var" = "DUE26"),
+      list("visit_type" = 12, "suffix" = 52, "due_df" = due52_df_mat, "due_var" = "DUE52")
+    )
+    
+  } else { 
   # Define the visit types and corresponding due dataframes and due variables
   visit_types <- list(
-    list("visit_type" = 10, "suffix" = 6, "due_df" = due06_df, "due_var" = "DUE06")
-    # list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df, "due_var" = "DUE26")
+    list("visit_type" = 10, "suffix" = 6, "due_df" = due06_df_mat, "due_var" = "DUE06")
+    # list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df_mat, "due_var" = "DUE26")
   )
+  }
   
   # Generate the missing reports using lapply
   missing_reports <- lapply(visit_types, function(v) {
@@ -1500,6 +1693,7 @@ if (exists("mnh07")) {
   print("MNH07 dataset not uploaded")
 }
 
+##MNH08 - TYPE_VISIT %IN% C(10,11); GHANA (7-12) ----
 if (exists("mnh08")) {
   
   #Loop MNH08 Missing Forms (TYPE-VISIT %in% c(10,11))
@@ -1530,11 +1724,25 @@ if (exists("mnh08")) {
     return(result)
   }
   
+  
+ if (site == "Ghana") {
+   # Define the visit types and corresponding due dataframes and due variables
+     visit_types <- list(
+       list("visit_type" = 7, "suffix" = 0, "due_df" = due00_df_mat, "due_var" = "DUE00"),
+       list("visit_type" = 8, "suffix" = 1, "due_df" = due01_df_mat, "due_var" = "DUE01"),
+       list("visit_type" = 9, "suffix" = 4, "due_df" = due04_df_mat, "due_var" = "DUE04"),
+       list("visit_type" = 10,"suffix" = 6,"due_df" = due06_df_mat, "due_var" = "DUE06"),
+       list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df_mat, "due_var" = "DUE26"),
+       list("visit_type" = 12, "suffix" = 52, "due_df" = due52_df_mat, "due_var" = "DUE52")
+     )
+   
+ } else { 
   # Define the visit types and corresponding due dataframes and due variables
   visit_types <- list(
-    list("visit_type" = 10, "suffix" = 6, "due_df" = due06_df, "due_var" = "DUE06")
-    # list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df, "due_var" = "DUE26")
+    list("visit_type" = 10, "suffix" = 6, "due_df" = due06_df_mat, "due_var" = "DUE06")
+    # list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df_mat, "due_var" = "DUE26")
   )
+ }
   
   # Generate the missing reports using lapply
   missing_reports <- lapply(visit_types, function(v) {
@@ -1542,12 +1750,15 @@ if (exists("mnh08")) {
   })
   
   
-  # Combine all reports into a single dataframe
+  # Combine all reports into a single dataframe 
   Missing_08_PNC <- do.call(rbind, missing_reports)
   
 } else {print ("MNH08 dataset not uploaded")}
 
-if (exists("mnh012")) {
+
+##MNH12 - TYPE_VISIT %IN% C(7,8,9,10,11,12) ----
+
+if (exists("mnh12")) {
   
   #Loop MNH12 Missing Forms (TYPE-VISIT %in% c(7,8,9,10,11,12))
   generate_missing_report <- function(visit_type, due_df, suffix, PNC_df, due_var) {
@@ -1576,12 +1787,12 @@ if (exists("mnh012")) {
   }
   
   visit_types <- list(
-    list("visit_type" = 7, "suffix" = 0, "due_df" = due00_df, "due_var" = "DUE00"),
-    list("visit_type" = 8, "suffix" = 1, "due_df" = due01_df, "due_var" = "DUE01"),
-    list("visit_type" = 9, "suffix" = 4, "due_df" = due04_df, "due_var" = "DUE04"),
-    list("visit_type" = 10,"suffix" = 6,"due_df" = due06_df, "due_var" = "DUE06"),
-    list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df, "due_var" = "DUE26"),
-    list("visit_type" = 12, "suffix" = 52, "due_df" = due52_df, "due_var" = "DUE52")
+    list("visit_type" = 7, "suffix" = 0, "due_df" = due00_df_mat, "due_var" = "DUE00"),
+    list("visit_type" = 8, "suffix" = 1, "due_df" = due01_df_mat, "due_var" = "DUE01"),
+    list("visit_type" = 9, "suffix" = 4, "due_df" = due04_df_mat, "due_var" = "DUE04"),
+    list("visit_type" = 10,"suffix" = 6,"due_df" = due06_df_mat, "due_var" = "DUE06"),
+    list("visit_type" = 11, "suffix" = 26, "due_df" = due26_df_mat, "due_var" = "DUE26"),
+    list("visit_type" = 12, "suffix" = 52, "due_df" = due52_df_mat, "due_var" = "DUE52")
   )
   
   missing_reports <- lapply(visit_types, function(v) {
@@ -1700,32 +1911,34 @@ if (exists("mnh25")) {
 
 if (exists("mnh26")) {
   
-#MNH26 - ANC 32
-PNC06_26 <- mnh26_df  %>% filter(EST_TYPE_VISIT == 10) %>% 
-  select(MOMID, PREGID, MAT_VISIT_MNH26, FTGE_OBSTDAT, MAT_DELIVERY_DATE) 
-
-Missing_26_PNC <- due06_df %>% 
-  distinct(MOMID, PREGID, .keep_all = TRUE) %>%
-  filter (PREGID %in% ReMAPPEnrolled$PREGID) %>% 
-  left_join (PNC06_26, by = c("MOMID", "PREGID")) %>%
-  mutate(
-    Query = ifelse(MAT_VISIT_MNH26 %in% c(1, 2, 3, 4, 5, 6, 7, 8, 88), FALSE,
-                   ifelse(DUE06 == FALSE, "Not Due",
-                          ifelse(is.na(MAT_VISIT_MNH26) & DUE06 == TRUE, "Missing PNC06 MNH26 Form", 
-                                 ifelse(!(MAT_VISIT_MNH26 %in% c(1:8, 88)) & !is.na(MAT_VISIT_MNH26) & (DUE06 == TRUE), "Invalid Data Entry",   
-                                        "Not Applicable")))),
-    Variable_Value = MAT_VISIT_MNH26,
-    Form = "MNH26",
-    VisitDate = FTGE_OBSTDAT,
-    VisitType = "10", 
-    Varname = "MAT_VISIT_MNH26") %>%
-  filter(!(Query %in% c(FALSE, "Not Due")))%>%
-  select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, DOB, Varname, Variable_Value, Form, Query)
-
+  #MNH26 - PNC 06
+  PNC06_26 <- mnh26_df  %>% filter(EST_TYPE_VISIT == 10) %>% 
+    select(MOMID, PREGID, MAT_VISIT_MNH26, FTGE_OBSTDAT, MAT_DELIVERY_DATE) 
+  
+  Missing_26_PNC <- due06_df %>% 
+    distinct(MOMID, PREGID, .keep_all = TRUE) %>%
+    filter (PREGID %in% ReMAPPEnrolled$PREGID) %>% 
+    filter ((DOB + 42) < as.Date("2025-01-06")) %>%
+    left_join (PNC06_26, by = c("MOMID", "PREGID")) %>%
+    mutate(
+      Query = ifelse(MAT_VISIT_MNH26 %in% c(1, 2, 3, 4, 5, 6, 7, 8, 88), FALSE,
+                     ifelse(DUE06 == FALSE, "Not Due",
+                            ifelse(is.na(MAT_VISIT_MNH26) & DUE06 == TRUE, "Missing PNC06 MNH26 Form", 
+                                   ifelse(!(MAT_VISIT_MNH26 %in% c(1:8, 88)) & !is.na(MAT_VISIT_MNH26) & (DUE06 == TRUE), "Invalid Data Entry",   
+                                          "Not Applicable")))),
+      Variable_Value = MAT_VISIT_MNH26,
+      Form = "MNH26",
+      VisitDate = FTGE_OBSTDAT,
+      VisitType = "10", 
+      Varname = "MAT_VISIT_MNH26") %>%
+    filter(!(Query %in% c(FALSE, "Not Due")))%>%
+    select(MOMID, PREGID, VisitDate, VisitType, UPLOADDT, DOB, Varname, Variable_Value, Form, Query)
+  
 } else {print ("MNH26 dataset not uploaded")}
 
 ### For MNH36 Missing Forms
 if (exists("mnh36")) {
+  
   
   # Loop MNH36 Missing Forms (TYPE-VISIT %in% c(7,8,9))
   generate_mnh36_report <- function(visit_type, due_df, suffix, due_var, due_bili) {
@@ -1787,7 +2000,7 @@ if (exists("mnh36")) {
   print("MNH36 dataset not uploaded")
 }
 
-#Bind All PNC Forms
+##Bind all PNC forms ----
 # List of dataframes to check
 df_list_pnc <- c("Missing_05_PNC", "Missing_06_PNC", "Missing_07_PNC", "Missing_08_PNC",
                  "Missing_12_PNC", "Missing_13_PNC", "Missing_14_PNC", "Missing_15_PNC", 
@@ -1859,17 +2072,17 @@ if (nrow(all_pnc_missing) > 0) {
     combinedPNC_query <- all_pnc_label
   }
   
-  #Bind all Missing Forms
+  ##Exporting PNC missing infant forms ----
   InfMissingForms_query <- combinedPNC_query  %>% 
     mutate(UploadDate = UploadDate, 
-           ScrnID = "NA",
+           ScrnID = " ",
            `Variable Name` = Varname,
            `Variable Value` = Variable_Value,
            InfantID = INFANTID,
-           FieldType = "NA",  
+           FieldType = " ",  
            MomID = MOMID,
            PregID = PREGID,
-           VisitDate = "NA",
+           VisitDate = NA,
            DateEditReported = format(Sys.time(), "%Y-%m-%d"),
            Form_Edit_Type = paste(Form,"_", EditType),
            QueryID = paste0(MomID, "_", UploadDate, "_", EditType, "_", "05" ) 
@@ -1877,9 +2090,8 @@ if (nrow(all_pnc_missing) > 0) {
     select ( QueryID, UploadDate, ScrnID, MomID, PregID, InfantID, VisitType, VisitDate, Form, 
              'Variable Name', 'Variable Value', FieldType, EditType, DateEditReported, Form_Edit_Type)
   
-  save(InfMissingForms_query, file = "InfMissingForms_query.rda") 
-  
-  
+
+  save(InfMissingForms_query, file = paste0(path_to_save,"InfMissingForms_query.rda"))
   #create comments to specify missing forms
   
   InfMissingFormsQuery_comments <- missing_pnc_merged %>%
@@ -1923,10 +2135,11 @@ if (nrow(all_pnc_missing) > 0) {
     InfMissingFormsQuery_comments <- InfMissingFormsQuery_comments %>%
       left_join(closeout_miss_inf, by = c("MOMID", "PREGID", "INFANTID"))
     
-  } else {InfMissingFormsQuery_comments <- InfMissingFormsQuery_comments %>% mutate (GW_Comment = "")}
+  } else {InfMissingFormsQuery_comments <- InfMissingFormsQuery_comments %>% mutate (GW_Comment = NA)}
   
   
-  save(InfMissingFormsQuery_comments, file = "InfMissingFormsQuery_comments.rda") 
+
+  save(InfMissingFormsQuery_comments, file = paste0(path_to_save,"InfMissingFormsQuery_comments.rda"))
   
   print("PNC Missing Forms Query ran successfully")
   
@@ -1935,3 +2148,441 @@ if (nrow(all_pnc_missing) > 0) {
   print("No Missing PNC Forms")
   
 }
+
+#G3 MISSING FORMS  ----
+if (!site %in% c("Zambia")) {
+  
+  
+  if (site == "Ghana") { start_date = "2025-03-24" } 
+  
+  if ( site %in% c("India-CMC", "India_CMC")) {start_date = "2025-01-30" }
+  
+  if ( site %in% c("India-SAS", "India_SAS")) { start_date = "2025-06-09" }
+  
+  if (site == "Zambia") { start_date = "2025-01-30" }
+  
+  if (site == "Kenya") { start_date = "2025-06-03" }
+  
+  if (site == "Pakistan") { start_date = "2025-04-21" }
+  
+  if (exists("mnh06")) {
+  due_g3 <- mnh06 %>% 
+    mutate (DIAG_VSDAT = ymd(parse_date_time(DIAG_VSDAT, c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y"))),
+            VISIT_TEXT = case_when(TYPE_VISIT == 4 ~ "ANC32",
+                                   TYPE_VISIT == 9 ~ "PNC4",
+                                   TRUE ~ NA),
+            DUE_G3 = TRUE) %>% 
+    filter (DIAG_VSDAT >= ymd(start_date)) %>% 
+    filter (TYPE_VISIT %in% c(4,9) & MAT_VISIT_MNH06 %in% c(1,2)) %>% 
+    distinct(MOMID, PREGID,TYPE_VISIT, .keep_all = TRUE) %>%
+    select (MOMID, PREGID, TYPE_VISIT, VISIT_TEXT, DUE_G3) %>%
+    filter (PREGID %in% Enrolled$PREGID)
+  } else {
+    print("No MNH06 Uploaded"); stop()
+  }
+  
+  if (exists("mnh33")) {
+  ##MNH33 - ANC32, PNC4 ----
+  Missing_33 <- due_g3 %>% 
+    left_join (mnh33, select (MOMID, PREGID, TYPE_VISIT, 
+                              MAT_VITAL_MNH33, MAT_VISIT_MNH33,
+                              SD_OBSSTDAT),
+                      by = c("MOMID", "PREGID", "TYPE_VISIT")) %>%
+    mutate(
+      Query = case_when(MAT_VISIT_MNH33 %in% c(1:8, 88) ~ "Not Due",
+                        DUE_G3 == TRUE & is.na(MAT_VISIT_MNH33) ~ paste0("Missing ", VISIT_TEXT, " MNH33 Form"),
+                      !(MAT_VISIT_MNH33 %in% c(1:8, 88)) & !is.na(MAT_VISIT_MNH33) & (DUE_G3 == TRUE) ~ "Invalid Data Entry",   
+                        TRUE ~ "Data Entry Error"),
+      Variable_Value = MAT_VISIT_MNH33,
+      Form = "MNH33",
+      VisitDate = SD_OBSSTDAT,
+      VisitType = TYPE_VISIT, 
+      Variable_Name = "MAT_VISIT_MNH33",
+      UPLOADDT = UploadDate,
+      INFANTID = NA) %>%
+    filter(!(Query %in% c(FALSE, "Not Due")))%>%
+    select(MOMID, PREGID, INFANTID, VisitDate, VisitType, UPLOADDT,
+           Variable_Name, Variable_Value, Form, Query)
+  }
+  
+  if (exists("mnh34")) {
+ 
+  ##MNH34 - ANC32, PNC4 ---- 
+  Missing_34 <- due_g3 %>% 
+    left_join (mnh34, select (MOMID, PREGID, TYPE_VISIT, 
+                              MAT_VITAL_MNH34, MAT_VISIT_MNH34,
+                              SD_OBSSTDAT),
+               by = c("MOMID", "PREGID", "TYPE_VISIT")) %>%
+    mutate(
+      Query = case_when(MAT_VISIT_MNH34 %in% c(1:8, 88) ~ "Not Due",
+                        DUE_G3 == TRUE & is.na(MAT_VISIT_MNH34) ~ paste0("Missing ", VISIT_TEXT, " MNH34 Form"),
+                        !(MAT_VISIT_MNH34 %in% c(1:8, 88)) & !is.na(MAT_VISIT_MNH34) & (DUE_G3 == TRUE) ~ "Invalid Data Entry",   
+                        TRUE ~ "Data Entry Error"),
+      Variable_Value = MAT_VISIT_MNH34,
+      Form = "MNH34",
+      VisitDate = SD_OBSSTDAT,
+      VisitType = TYPE_VISIT, 
+      Variable_Name = "MAT_VISIT_MNH34",
+      INFANTID = NA,
+      UPLOADDT = UploadDate) %>%
+    filter(!(Query %in% c(FALSE, "Not Due")))%>%
+    select(MOMID, PREGID, INFANTID, VisitDate, VisitType, UPLOADDT,
+           Variable_Name, Variable_Value, Form, Query)
+  }
+  
+  if (exists("mnh35")) {
+  ##MNH35 - ANC32, PNC4 ----
+  Missing_35 <- due_g3 %>% 
+    left_join (mnh35, select (MOMID, PREGID, TYPE_VISIT, 
+                              MAT_VITAL_MNH35, MAT_VISIT_MNH35,
+                              SD_OBSSTDAT),
+               by = c("MOMID", "PREGID", "TYPE_VISIT")) %>%
+    mutate(
+      Query = case_when(MAT_VISIT_MNH35 %in% c(1:8, 88) ~ "Not Due",
+                        DUE_G3 == TRUE & is.na(MAT_VISIT_MNH35) ~ paste0("Missing ", VISIT_TEXT, " MNH35 Form"),
+                        !(MAT_VISIT_MNH35 %in% c(1:8, 88)) & !is.na(MAT_VISIT_MNH35) & (DUE_G3 == TRUE) ~ "Invalid Data Entry",   
+                        TRUE ~ "Data Entry Error"),
+      Variable_Value = MAT_VISIT_MNH35,
+      Form = "MNH35",
+      VisitDate = SD_OBSSTDAT,
+      VisitType = TYPE_VISIT, 
+      Variable_Name = "MAT_VISIT_MNH35",
+      INFANTID = NA,
+      UPLOADDT = UploadDate) %>%
+    filter(!(Query %in% c(FALSE, "Not Due")))%>%
+    select(MOMID, PREGID, INFANTID, VisitDate, VisitType, UPLOADDT,
+           Variable_Name, Variable_Value, Form, Query)
+  
+  }
+  
+  df_list_g3 <- c("Missing_33","Missing_34","Missing_35" )
+  
+  # Initialize an empty list to hold the dataframes that exist
+  existing_g3 <- lapply(df_list_g3, function(df) {
+    if (exists(df)) {
+      get(df) %>% mutate(across(everything(), as.character))  # Mutate to character if exists
+    } else {
+      NULL  # Return NULL if the dataframe doesn't exist
+    }
+  })
+  
+  # Remove NULL entries and combine the remaining dataframes
+  all_g3_missing <- bind_rows(existing_g3[!sapply(existing_g3, is.null)])
+  
+  # Check if the combined dataframe has any rows
+  if (nrow(all_g3_missing) > 0) {
+    
+    #Truncating and Reshaping g3 Missingness
+    # Separate missing and invalid queries
+    missing_g3_query <- all_g3_missing %>% filter(is.na(Variable_Value))
+    
+    invalid_g3_entry <- all_g3_missing %>% filter(!is.na(Variable_Value)) %>% 
+      select (MOMID, PREGID, INFANTID, VisitType, Form, Variable_Name, Variable_Value, EditType = Query)
+    
+    missing_g3_category <- missing_g3_query %>%
+      group_by(MOMID, PREGID, INFANTID, VisitType) %>%
+      summarise(Missing_Forms = paste(Form, collapse = ", "))
+    
+    missing_g3_count <- missing_g3_query %>%
+      group_by(MOMID, PREGID, INFANTID, VisitType) %>%
+      count(name = "Frequency")
+    
+    missing_g3_merged <- merge(missing_g3_count, missing_g3_category, 
+                                by = c("VisitType", "MOMID", "PREGID", "INFANTID"))
+    
+    missing_g3_merged$VisitTypeLabel <- case_when(
+      missing_g3_merged$VisitType == 4 ~ "ANC32",
+      missing_g3_merged$VisitType == 9 ~ "PNC4")
+    
+    missing_g3_merged <- missing_g3_merged %>%
+      mutate(EditType = case_when (Frequency == 3 ~ paste0("Missing All G3 ", VisitTypeLabel, " Forms"),
+                                  Frequency < 3  & Frequency > 1 ~ paste0("Missing Multiple G3", " ", VisitTypeLabel, " Forms"), 
+                                  TRUE ~ paste0("Missing ", VisitTypeLabel, " ",  Missing_Forms, " Form")),
+             Form = Missing_Forms,
+             Variable_Name = NA,
+             Variable_Value = NA)  
+    
+    all_g3_label <- missing_g3_merged %>% 
+      select (MOMID, PREGID, INFANTID, VisitType, Form, Variable_Name, Variable_Value, EditType)
+    
+    if (exists("invalid_g3_entry") && !is.null(invalid_g3_entry)) {
+      # Combine all types of missing entries
+      combinedG3_query <- rbind(all_g3_label, invalid_g3_entry)
+      
+    } else {
+      combinedG3_query <- all_g3_label
+    }
+    
+    ##Bind all Missing G3 Forms ----
+    G3_MissingForms_query <- combinedG3_query  %>% 
+      mutate(UploadDate = UploadDate, 
+             ScrnID = NA,
+             `Variable Name` = Variable_Value,
+             `Variable Value` = Variable_Value,
+             InfantID = INFANTID,
+             FieldType = NA,  
+             MomID = MOMID,
+             PregID = PREGID,
+             VisitDate = NA,
+             DateEditReported = format(Sys.time(), "%Y-%m-%d"),
+             Form_Edit_Type = paste(Form,"_", EditType),
+             QueryID = paste0(MomID, "_", UploadDate, "_", EditType, "_", "05" ) 
+      )  %>%
+      select ( QueryID, UploadDate, ScrnID, MomID, PregID, InfantID, VisitType, VisitDate, Form, 
+               'Variable Name', 'Variable Value', FieldType, EditType, DateEditReported, Form_Edit_Type)
+    
+save(G3_MissingForms_query, file = paste0(path_to_save,"G3_MissingForms_query.rda"))
+}
+
+}
+
+
+
+# GSED/FCI MISSING FORMS ----
+##Import REMIND IDs
+file_path <- "Z:/ReMAPP_Aim3_IDs/remind-infantids_2026-04-02.xlsx"
+remind_ids <- read_excel(file_path) 
+
+enrol_remind <- remind_ids %>% filter (REMIND_ENROLLMENT_STATUS == 1 & SITE == site)
+
+
+inf_dob_remind <- enrol_remind %>%
+  select(MOMID, PREGID, INFANTID, PREG_OUTCOME) %>%
+  left_join(inf_live, by = c("MOMID", "PREGID", "INFANTID")) %>%
+  mutate(
+    # Ensure date columns are Date; ymd() is idempotent if already Date
+    DOB        = as.Date(DOB),
+    UploadDate = as.Date(UploadDate),
+    
+    # Add days directly; don't wrap in ymd()
+    DATE_3  = DOB + days(181),
+    DATE_12 = DOB + days(426),
+    
+    # Due flags; treat any NA comparison as FALSE
+    DUE03 = coalesce(DATE_3  < UploadDate, FALSE),
+    DUE12 = coalesce(DATE_12 < UploadDate, FALSE)
+  )
+
+
+DUE03 <- inf_dob_remind %>% 
+  select (-c("DATE_12", "DUE12")) %>%
+  filter (DUE03 == TRUE)  %>%
+  anti_join(cens_26_, by = c("MOMID", "PREGID", "INFANTID"))
+
+DUE12 <- inf_dob_remind %>% 
+  select (-c("DATE_3", "DUE03")) %>%
+  filter (DUE12 == TRUE)  %>%
+  anti_join(cens_52_, by = c("MOMID", "PREGID", "INFANTID"))
+  
+
+##MNH30 ----
+if (exists("mnh30")) {
+  
+  mnh30_sub <- mnh30 %>%
+    select(-any_of("DOB"))  %>%
+    left_join(inf_live, by = c("MOMID", "PREGID", "INFANTID")) %>%
+    mutate(
+      # Parse visit date with flexible formats
+      VISIT_OBSSTDAT = ymd(parse_date_time(VISIT_OBSSTDAT, 
+                                           c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y"))),
+      DOB        = as.Date(DOB),
+      # Age in days
+      AGE_TODAY = as.numeric(difftime(VISIT_OBSSTDAT, DOB, units = "days")),
+      
+      # Categorize age
+      AGE_CAT = case_when(
+        is.na(AGE_TODAY) ~ "AGE_MISS",
+        AGE_TODAY > 76  & AGE_TODAY < 182 ~ "3_MTH",
+        AGE_TODAY > 363 & AGE_TODAY < 427 ~ "12_MTH",
+        TRUE ~ "Query Not Applicable"
+      )
+    ) %>%
+    select(
+      MOMID, PREGID, INFANTID, AGE_TODAY, AGE_CAT, TYPE_VISIT,
+      VISIT_OBSSTDAT, DOB, INF_VISIT_MNH30, INF_VITAL_MNH30
+    ) %>%
+    distinct(MOMID, PREGID, INFANTID, AGE_TODAY, .keep_all = TRUE) %>%
+    filter (AGE_CAT != "Query Not Applicable" & INFANTID %in% inf_dob_remind$INFANTID) 
+  
+  
+  Missing_30_3 <- DUE03 %>%
+    left_join(
+      mnh30_sub %>%
+        rename(INF_VISIT_MNH30 = INF_VISIT_MNH30) %>%
+        filter (AGE_CAT == "3_MTH"),
+      by = c("MOMID", "PREGID", "INFANTID")
+    ) %>%
+    mutate(
+      Query = case_when(
+        INF_VISIT_MNH30 %in% c(1:8, 88) ~ "No Query",
+        DUE03 == TRUE & is.na(INF_VISIT_MNH30) ~ paste0("Missing 3-Month MNH30 Form"),
+        !(INF_VISIT_MNH30 %in% c(1:8, 88)) & !is.na(INF_VISIT_MNH30) & (DUE03 == TRUE) ~ "Invalid Data Entry",
+        TRUE ~ "Data Entry Error"
+      ),
+      Form = "MNH30",
+      Variable_Value = INF_VISIT_MNH30,
+      VisitDate = VISIT_OBSSTDAT,
+      VisitType = case_when(
+        grepl("Missing.*3", Query, ignore.case = TRUE) ~ 14,  # Changed to 3 for 3-month visit
+        TRUE ~ TYPE_VISIT
+      ),
+      Variable_Name = "INF_VISIT_MNH30", 
+      UPLOADDT = UploadDate
+    ) %>%
+    filter(!(Query %in% c("No Query"))) %>%  
+    select(MOMID, PREGID, INFANTID, VisitDate, VisitType, UPLOADDT,
+           Variable_Name, Variable_Value, Form, Query)
+  
+  Missing_30_12 <- DUE12 %>%
+    left_join(
+      mnh30_sub %>%
+        rename(INF_VISIT_MNH30 = INF_VISIT_MNH30) %>%
+        filter (AGE_CAT == "12_MTH"),
+      by = c("MOMID", "PREGID", "INFANTID")
+    ) %>%
+    mutate(
+      Query = case_when(
+        INF_VISIT_MNH30 %in% c(1:8, 88) ~ "No Query",
+        DUE12 == TRUE & is.na(INF_VISIT_MNH30) ~ paste0("Missing 12-Month MNH30 Form"),
+        !(INF_VISIT_MNH30 %in% c(1:8, 88)) & !is.na(INF_VISIT_MNH30) & (DUE12 == TRUE) ~ "Invalid Data Entry",
+        TRUE ~ "Data Entry Error"
+      ),
+      Form = "MNH30",
+      Variable_Value = INF_VISIT_MNH30,
+      VisitDate = VISIT_OBSSTDAT,
+      VisitType = case_when(
+        grepl("Missing.*12", Query, ignore.case = TRUE) ~ 12,  # Changed to 3 for 3-month visit
+        TRUE ~ TYPE_VISIT
+      ),
+      Variable_Name = "INF_VISIT_MNH30", 
+      UPLOADDT = UploadDate
+    ) %>%
+    filter(!(Query %in% c("No Query"))) %>%  
+    select(MOMID, PREGID, INFANTID, VisitDate, VisitType, UPLOADDT,
+           Variable_Name, Variable_Value, Form, Query)
+  
+}
+
+##MNH32 ----
+if (exists("mnh32")) {
+  
+  mnh32_sub <- mnh32 %>%
+    select(-any_of("DOB"))  %>%
+    left_join(inf_live, by = c("MOMID", "PREGID", "INFANTID")) %>%
+    mutate(
+      # Parse visit date with flexible formats
+      VISIT_OBSSTDAT = ymd(parse_date_time(VISIT_OBSSTDAT, 
+                                           c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y"))),
+      DOB        = as.Date(DOB),
+      # Age in days
+      AGE_TODAY = as.numeric(difftime(VISIT_OBSSTDAT, DOB, units = "days")),
+      
+      # Categorize age
+      AGE_CAT = case_when(
+        is.na(AGE_TODAY) ~ "AGE_MISS",
+        AGE_TODAY > 76  & AGE_TODAY < 182 ~ "3_MTH",
+        AGE_TODAY > 363 & AGE_TODAY < 427 ~ "12_MTH",
+        TRUE ~ "Query Not Applicable"
+      )
+    ) %>%
+    select(
+      MOMID, PREGID, INFANTID, AGE_TODAY, AGE_CAT, TYPE_VISIT,
+      VISIT_OBSSTDAT, DOB, INF_VISIT_MNH32, INF_VITAL_MNH32
+    ) %>%
+    distinct(MOMID, PREGID, INFANTID, AGE_TODAY, .keep_all = TRUE) %>%
+    filter (AGE_CAT != "Query Not Applicable" & INFANTID %in% inf_dob_remind$INFANTID) 
+  
+  Missing_32_3 <- DUE03 %>%
+    left_join(
+      mnh32_sub %>%
+        rename(INF_VISIT_MNH32 = INF_VISIT_MNH32) %>%
+        filter (AGE_CAT == "3_MTH"),
+      by = c("MOMID", "PREGID", "INFANTID")
+    ) %>%
+    mutate(
+      Query = case_when(
+        INF_VISIT_MNH32 %in% c(1:8, 88) ~ "No Query",
+        DUE03 == TRUE & is.na(INF_VISIT_MNH32) ~ paste0("Missing 3-Month MNH32 Form"),
+        !(INF_VISIT_MNH32 %in% c(1:8, 88)) & !is.na(INF_VISIT_MNH32) & (DUE03 == TRUE) ~ "Invalid Data Entry",
+        TRUE ~ "Data Entry Error"
+      ),
+      Variable_Value = INF_VISIT_MNH32,
+      VisitDate = VISIT_OBSSTDAT,
+      Form = "MNH32",
+      VisitType = case_when(
+        grepl("Missing.*3", Query, ignore.case = TRUE) ~ 14,  # Changed to 3 for 3-month visit
+        TRUE ~ TYPE_VISIT
+      ),
+      Variable_Name = "INF_VISIT_MNH32", 
+      UPLOADDT = UploadDate
+    ) %>%
+    filter(!(Query %in% c("No Query"))) %>%  
+    select(MOMID, PREGID, INFANTID, VisitDate, VisitType, UPLOADDT,
+           Variable_Name, Variable_Value, Form, Query)
+  
+  Missing_32_12 <- DUE12 %>%
+    left_join(
+      mnh32_sub %>%
+        rename(INF_VISIT_MNH32 = INF_VISIT_MNH32) %>%
+        filter (AGE_CAT == "12_MTH"),
+      by = c("MOMID", "PREGID", "INFANTID")
+    ) %>%
+    mutate(
+      Query = case_when(
+        INF_VISIT_MNH32 %in% c(1:8, 88) ~ "No Query",
+        DUE12 == TRUE & is.na(INF_VISIT_MNH32) ~ paste0("Missing 12-Month MNH32 Form"),
+        !(INF_VISIT_MNH32 %in% c(1:8, 88)) & !is.na(INF_VISIT_MNH32) & (DUE12 == TRUE) ~ "Invalid Data Entry",
+        TRUE ~ "Data Entry Error"
+      ),
+      Variable_Value = INF_VISIT_MNH32,
+      VisitDate = VISIT_OBSSTDAT,
+      Form = "MNH32",
+      VisitType = case_when(
+        grepl("Missing.*12", Query, ignore.case = TRUE) ~ 12, 
+        TRUE ~ TYPE_VISIT
+      ),
+      Variable_Name = "INF_VISIT_MNH32", 
+      UPLOADDT = UploadDate
+    ) %>%
+    filter(!(Query %in% c("No Query"))) %>%  
+    select(MOMID, PREGID, INFANTID, VisitDate, VisitType, UPLOADDT,
+           Variable_Name, Variable_Value, Form, Query)
+}
+
+
+
+##Combine REMIND Missingness ----
+df_list_remind <- c("Missing_30_3", "Missing_30_12","Missing_32_3", "Missing_32_12")
+
+existing_remind <- lapply(df_list_remind, function(df) {
+  if (exists(df)) {
+    get(df) %>% mutate(across(everything(), as.character))
+  } else {
+    NULL
+  }
+})
+
+all_remind_missing <- bind_rows(existing_remind[!sapply(existing_remind, is.null)])
+
+if (nrow(all_remind_missing) > 0) {
+  REMIND_MissingForms_query <- all_remind_missing %>%
+    mutate(UploadDate = UploadDate, 
+           ScrnID = NA,
+           `Variable Name` = Variable_Value,
+           `Variable Value` = Variable_Value,
+           InfantID = INFANTID,
+           EditType = Query,
+           FieldType = NA,  
+           MomID = MOMID,
+           PregID = PREGID,
+           DateEditReported = format(Sys.time(), "%Y-%m-%d"),
+           Form_Edit_Type = paste(Form,"_", EditType),
+           QueryID = paste0(MomID, "_", UploadDate, "_", EditType, "_", "05" ) 
+    )  %>%
+    select ( QueryID, UploadDate, ScrnID, MomID, PregID, InfantID, VisitType, VisitDate, Form, 
+             'Variable Name', 'Variable Value', FieldType, EditType, DateEditReported, Form_Edit_Type) %>%
+    mutate_all(as.character())
+  
+  save(REMIND_MissingForms_query, file = paste0(path_to_save,"REMIND_MissingForms_query.rda"))
+  
+} else { print("No REMIND Missing Forms")}
