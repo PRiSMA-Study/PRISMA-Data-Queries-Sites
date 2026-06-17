@@ -2,7 +2,7 @@
 #* Written by: Precious Williams
 
 #* Date Started: 21 June 2023
-#* Last Updated: 30 March 2025
+#* Last Updated: 17 June 2026
 #* Updated the codes to new version
 
 #* Updated queries to compile all visits into one line of query
@@ -41,6 +41,14 @@ load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = 
 path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries/"
 
 setwd(path_to_save)
+
+# UPDATE EACH RUN: load in site list of biliruler IDs
+bili_inf <- read_excel(paste0("Z:/QueryReports/Bilirulerparticipants_260610.xlsx")) %>%
+  filter(
+    (site %in% c("India-CMC", "India_CMC") & SITE %in% c("India-CMC", "India_CMC")) |
+      (site %in% c("India-SAS", "India_SAS") & SITE %in% c("India-SAS", "India_SAS")) |
+      (SITE == site) # Handles Ghana, Kenya, Pakistan, Zambia normally
+  )
 
 #Step 0 - if MOMID or PREGID is not present in MNH01, we want to transfer the MOMID and PREGIDs from MNH02 into MNH01 by SCRNID
 
@@ -389,15 +397,7 @@ if (exists("mnh09")==TRUE){
   due_inf$DUE06 <- ifelse (due_inf$UPLOADDT > due_inf$UP06, TRUE, FALSE)
   due_inf$DUE26 <- ifelse (due_inf$UPLOADDT > due_inf$UP26, TRUE, FALSE)
   due_inf$DUE52 <- ifelse (due_inf$UPLOADDT > due_inf$UP52, TRUE, FALSE)
-  
 
-  
-    bili_inf <- read_excel(paste0("Z:/QueryReports/Bilirulerparticipants_260610.xlsx")) %>%
-      filter(
-        (site %in% c("India-CMC", "India_CMC") & SITE %in% c("India-CMC", "India_CMC")) |
-          (site %in% c("India-SAS", "India_SAS") & SITE %in% c("India-SAS", "India_SAS")) |
-          (SITE == site) # Handles Ghana, Kenya, Pakistan, Zambia normally
-      )
   
   due_inf$DUE00_BILI <- ifelse(
     due_inf$BILI_STARTDATE < due_inf$LW00 & due_inf$LW00 <= due_inf$BILI_ENDDATE & due_inf$INFANTID %in% bili_inf$INFANTID, 
@@ -1936,39 +1936,39 @@ if (exists("mnh26")) {
   
 } else {print ("MNH26 dataset not uploaded")}
 
-### For MNH36 Missing Forms
-if (exists("mnh36")) {
+### For  Missing Forms
+if (exists("")) {
   
   
-  # Loop MNH36 Missing Forms (TYPE-VISIT %in% c(7,8,9))
-  generate_mnh36_report <- function(visit_type, due_df, suffix, due_var, due_bili) {
-    # Select relevant columns from MNH36 based on the visit type
-    PNC_36 <- mnh36 %>% filter(TYPE_VISIT == visit_type) %>% 
+  # Loop  Missing Forms (TYPE-VISIT %in% c(7,8,9))
+  generate__report <- function(visit_type, due_df, suffix, due_var, due_bili) {
+    # Select relevant columns from  based on the visit type
+    PNC_36 <-  %>% filter(TYPE_VISIT == visit_type) %>% 
       mutate(VISIT_OBSSTDAT = ymd(parse_date_time(VISIT_OBSSTDAT, c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
-      select(MOMID, PREGID, INFANTID, INF_VISIT_MNH36, VISIT_OBSSTDAT)
+      select(MOMID, PREGID, INFANTID, INF_VISIT_, VISIT_OBSSTDAT)
     
     # Generate missing report by joining with the due dataframe
     result <- due_df %>%
       distinct(INFANTID, MOMID, PREGID, .keep_all = TRUE) %>%
       left_join(PNC_36, by = c("MOMID", "PREGID", "INFANTID")) %>%
       mutate(
-        Query = ifelse(is.na(INF_VISIT_MNH36) & !!sym(due_var) == TRUE & !!sym(due_bili) == TRUE, 
-                       paste0("Missing PNC", suffix, " MNH36 Form"),
+        Query = ifelse(is.na(INF_VISIT_) & !!sym(due_var) == TRUE & !!sym(due_bili) == TRUE, 
+                       paste0("Missing PNC", suffix, "  Form"),
                        
-                       ifelse(INF_VISIT_MNH36 %in% c(1, 2, 3, 4, 5, 6, 7, 8, 88), FALSE,
+                       ifelse(INF_VISIT_ %in% c(1, 2, 3, 4, 5, 6, 7, 8, 88), FALSE,
                               
                               ifelse(!!sym(due_var) == FALSE | !!sym(due_bili) == FALSE, "Not Due",
                                      
-                                     ifelse(!(INF_VISIT_MNH36 %in% c(1:8, 88)) & !is.na(INF_VISIT_MNH36) & !!sym(due_var) == TRUE & !!sym(due_bili) == TRUE, 
-                                            paste0("Invalid Data Entry for MNH36 PNC", suffix),   
+                                     ifelse(!(INF_VISIT_ %in% c(1:8, 88)) & !is.na(INF_VISIT_) & !!sym(due_var) == TRUE & !!sym(due_bili) == TRUE, 
+                                            paste0("Invalid Data Entry for  PNC", suffix),   
                                             
                                             "Not Applicable")))),
         
-        Variable_Value = INF_VISIT_MNH36,
-        Form = "MNH36",
+        Variable_Value = INF_VISIT_,
+        Form = "",
         VisitDate = VISIT_OBSSTDAT,
         VisitType = as.character(visit_type), 
-        Varname = "INF_VISIT_MNH36"
+        Varname = "INF_VISIT_"
       ) %>%
       filter(!(Query %in% c(FALSE, "Not Due"))) %>%
       select(MOMID, PREGID, INFANTID, VisitDate, VisitType, UPLOADDT, DOB, Varname, Variable_Value, Form, Query)
@@ -1985,19 +1985,19 @@ if (exists("mnh36")) {
   
   # Generate the missing reports using lapply
   missing_reports <- lapply(visit_types, function(v) {
-    generate_mnh36_report(v$visit_type, v$due_df, v$suffix, v$due_var, v$due_bili)
+    generate__report(v$visit_type, v$due_df, v$suffix, v$due_var, v$due_bili)
   })
   
   # Combine all reports into a single dataframe
   Missing_36_PNC_raw <- do.call(rbind, missing_reports)
   
   # Filter out specific INFANTIDs for VisitType == 9
-  PNC06_BILI_IDs <- mnh36 %>% filter(INF_VISIT_MNH36 %in% c(1, 2) & TYPE_VISIT == 10) %>% pull(INFANTID)
+  PNC06_BILI_IDs <-  %>% filter(INF_VISIT_ %in% c(1, 2) & TYPE_VISIT == 10) %>% pull(INFANTID)
   
   Missing_36_PNC <- Missing_36_PNC_raw %>% filter(!(INFANTID %in% PNC06_BILI_IDs & VisitType == 9))
   
 } else {
-  print("MNH36 dataset not uploaded")
+  print(" dataset not uploaded")
 }
 
 ##Bind all PNC forms ----
