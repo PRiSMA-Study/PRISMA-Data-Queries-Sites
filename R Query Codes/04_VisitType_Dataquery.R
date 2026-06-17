@@ -45,7 +45,7 @@ load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_wide.Rdata", sep = 
 load(paste0("~/PRiSMAv2Data/Kenya/2023-08-25/data/2023-08-25_long.Rdata", sep = "")) 
 
 ## UPDATE EACH RUN: set path to location where you want to save the query output below 
-path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries/"
+path_to_save <- "~/PRiSMAv2Data/Kenya/2023-08-25/queries"
 
 
 mnh02_ids <- mnh02 %>% select(SCRNID, MOMID, PREGID)
@@ -973,3 +973,858 @@ if (exists("GSED_visit_query_output") == TRUE) {
   print(paste0("No GSED Query for ", site))
   stop("Process stopped due to missing GSED Query.")
 }
+
+#*****************************************************************************
+## Visit Date Discrepancy Query ----
+#1. To determine if there is mismatching in MNH07 and MNH08 specimen collection
+#2. Are the lab test date before the VisitDate (Speciment collection date)
+#3. To identify ANC visits which happen after PREG_END_DATE (MNH09)
+#4. To identify PNC visits which happen before PREG_END_DATE (MNH09)
+#*****************************************************************************
+
+#*****************************************************************************
+#Query 1: Date Mismatch and Protocol Queries MNH07/MNH08 Mismatch ----
+#*****************************************************************************
+
+#MNH07 vs MNH08 date difference 
+mnh07_df <- mnh07 %>% select(MOMID, PREGID, TYPE_VISIT, MAT_SPEC_COLLECT_DAT, MAT_VISIT_MNH07) %>%
+  filter (MAT_VISIT_MNH07 %in% c(1,2)) %>% 
+  mutate(MAT_SPEC_COLLECT_DAT = ymd(parse_date_time(MAT_SPEC_COLLECT_DAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
+  filter (MAT_SPEC_COLLECT_DAT > ymd("2007-07-07")) %>% 
+  select (-MAT_VISIT_MNH07) %>% 
+  distinct(MOMID, PREGID, TYPE_VISIT, .keep_all = TRUE) %>%
+  filter (!is.na(MAT_SPEC_COLLECT_DAT))
+
+mnh08_df <- mnh08 %>% select(MOMID, PREGID, TYPE_VISIT, LBSTDAT, MAT_VISIT_MNH08) %>% 
+  filter (MAT_VISIT_MNH08 %in% c(1,2)) %>% 
+  mutate(LBSTDAT = ymd(parse_date_time(LBSTDAT, order = c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
+  filter (LBSTDAT > ymd("2007-07-07")) %>% 
+  select (-MAT_VISIT_MNH08) %>% 
+  distinct(MOMID, PREGID, TYPE_VISIT, .keep_all = TRUE) %>%
+  filter (!is.na(LBSTDAT))
+
+lab_all_df <- mnh08_df %>% 
+  inner_join(mnh07_df, by = c("MOMID", "PREGID", "TYPE_VISIT")) %>% 
+  mutate(Date_diff =  abs(as.numeric(difftime(LBSTDAT, MAT_SPEC_COLLECT_DAT, units = "days"))),
+         Query =  case_when(Date_diff >= 1 ~ 
+                              "Specimen Collection Date Mismatch",
+                            TRUE ~  "No Query")) %>%
+  filter(Query != "No Query") %>%
+  # Step 4: Format to match query export structure
+  mutate(
+    SCRNID = "",
+    Variable_Name = "MAT_SPEC_COLLECT_DAT/LBSTDAT",
+    Variable_Value = Date_diff,
+    VisitDate = "",
+    EditType = Query,
+    INFANTID = NA_character_,
+    VisitType = TYPE_VISIT,
+    Form = "MNH07/MNH08",
+    QUERYID = paste0(Form, "_", PREGID, "_", Variable_Value, "_", Variable_Name, "_", "11")
+  ) %>% 
+  select(QUERYID, SCRNID, MOMID, PREGID, INFANTID, VisitType, VisitDate, 
+         Form, Variable_Name, Variable_Value, EditType) %>% 
+  mutate_all(as.character())
+
+
+# Add metadata
+if (nrow(lab_all_df) > 0) {
+  
+  names(lab_all_df) <- c("QueryID", "ScrnID", "MomID", "PregID", "InfantID", 
+                         "VisitType", "VisitDate", "Form", "Variable Name", 
+                         "Variable Value", "EditType")
+  
+  
+  SpecimenDate_export_query <- cbind(
+    lab_all_df,
+    UploadDate = UploadDate,
+    FieldType = "Number",
+    DateEditReported = format(Sys.time(), "%Y-%m-%d")
+  )
+  
+  SpecimenDate_export_query$Form_Edit_Type <- paste(SpecimenDate_export_query$Form,"_", SpecimenDate_export_query$EditType)
+  
+  save(SpecimenDate_export_query, file = paste0(path_to_save, "/SpecimenDate_export_query.rda"))
+  
+} else {
+  
+  print("No MNH07 and MNH08 speciment collection date Discrepancy")
+}
+
+
+#Query 2: MNH08 Lab Test Date ----
+#Are the lab test date before the VisitDate (Speciment collection date)
+#Unique query uses both the long and wide dataset
+
+#collect all date variables
+tdat_vars <- names(mnh08)[str_ends(names(mnh08), "TDAT")]
+
+
+lab_visit_df <- data_long %>%
+  
+  # Step 1: Keep only test date variables (those ending in TDAT) from MNH08 form
+  filter(varname %in% tdat_vars & form == "MNH08") %>%
+  
+  # Step 2: Convert both 'response' (the test date) and VisitDate to proper Date format
+  mutate(
+    response = ymd(parse_date_time(response, 
+                                   orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))),
+    VisitDate = ymd(parse_date_time(VisitDate, 
+                                    orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))
+  ) %>%
+  
+  # Step 3: Filter out any rows with:
+  # - missing or invalid dates
+  # - dates earlier than 2007-08-08 (considered invalid dates)
+  # - test dates (response) that occur BEFORE the VisitDate (query!!!)
+  filter(
+    !is.na(response) & 
+      !is.na(VisitDate) & 
+      VisitDate > ymd("2007-07-07") & 
+      response > ymd("2007-07-07") & 
+      response < VisitDate
+  ) %>%
+  
+  # Step 4: Create fields needed for query output
+  mutate(
+    EditType = "Test Date is Before Specimen Collection",  # Describe the issue
+    Variable_Value = response,                             # Store the actual invalid date
+    Variable_Name = varname                                # Store which variable triggered it
+  ) %>%
+  
+  # Step 5: Clean up and keep only relevant columns for query export
+  ungroup() %>%
+  select(SCRNID, MOMID, PREGID, VisitDate, EditType, TYPE_VISIT, Variable_Name, Variable_Value)
+
+# Step 6: Export in same query format if any results
+if (nrow(lab_visit_df) > 0) {
+  
+  if (site == "Kenya") {
+    lab_visit_df <- lab_visit_df %>% 
+      filter (Variable_Name != "BLD_GRP_LBTSTDAT")
+  }
+  
+  LabVisitDate_Query <- lab_visit_df %>%
+    mutate(
+      INFANTID = NA_character_,
+      VisitType = TYPE_VISIT,
+      Form = "MNH08",
+      QUERYID = paste0(Form, "_", VisitDate, "_", PREGID, "_", EditType, "_", Variable_Value, "_", "15")
+    ) %>%
+    select(QUERYID, SCRNID, MOMID, PREGID, INFANTID, VisitType, VisitDate, 
+           Form, Variable_Name, Variable_Value, EditType) %>%
+    mutate(across(everything(), as.character))
+  
+  names(LabVisitDate_Query) <- c("QueryID", "ScrnID", "MomID", "PregID", "InfantID", 
+                                 "VisitType", "VisitDate", "Form", "Variable Name", 
+                                 "Variable Value", "EditType")
+  
+  LabVisitDate_export_query <- cbind(
+    LabVisitDate_Query,
+    UploadDate = UploadDate,
+    FieldType = "Date",
+    DateEditReported = format(Sys.time(), "%Y-%m-%d")
+  )
+  
+  LabVisitDate_export_query$Form_Edit_Type <- paste(LabVisitDate_export_query$Form,"_", LabVisitDate_export_query$EditType)
+  
+  save(LabVisitDate_export_query, file = paste0(path_to_save, "/LabVisitDate_export_query.rda"))
+  
+} else {
+  print("No Lab test date discrepancy found.")
+}
+
+#Query 3 and 4 Prep ----
+#Do ANC visits happen after PREG_END_DATE (MNH09)
+mnh09_sub <- mnh09 %>%
+  select(MOMID, PREGID, MAT_VISIT_MNH09, INFANTS_FAORRES, MAT_LD_OHOSTDAT,
+         INFANTID_INF1, INFANTID_INF2, INFANTID_INF3, INFANTID_INF4, DELIV_DSSTDAT_INF1, DELIV_DSSTDAT_INF2, 
+         DELIV_DSSTDAT_INF3, DELIV_DSSTDAT_INF4, DELIV_DSSTTIM_INF1, DELIV_DSSTTIM_INF2, DELIV_DSSTTIM_INF3, 
+         DELIV_DSSTTIM_INF4, BIRTH_DSTERM_INF1, BIRTH_DSTERM_INF2, BIRTH_DSTERM_INF3, BIRTH_DSTERM_INF4) %>%
+  
+  # Date parsing and conversion
+  mutate(across(c(DELIV_DSSTDAT_INF1:DELIV_DSSTDAT_INF4), 
+                ~ ymd(parse_date_time(.x, c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y"))))) %>%
+  
+  # Replace default dates and times with NA
+  mutate(across(starts_with("DELIV_DSSTDAT_INF"), 
+                ~ replace(.x, .x %in% c(ymd("1907-07-07"), ymd("2007-07-07"), ymd("1905-05-05")), NA)),
+         across(starts_with("DELIV_DSSTTIM_INF"), 
+                ~ replace(.x, .x == "77:77", NA))) %>%
+  
+  # Time conversion
+  mutate(across(starts_with("DELIV_DSSTTIM_INF"), ~ if_else(!is.na(.x), as.ITime(.x), NA))) %>%
+  
+  # Concatenate date and time into datetime
+  mutate(DELIVERY_DATETIME_INF1 = if_else(!is.na(DELIV_DSSTDAT_INF1) & !is.na(DELIV_DSSTTIM_INF1),
+                                          as.POSIXct(paste(DELIV_DSSTDAT_INF1, DELIV_DSSTTIM_INF1), format = "%Y-%m-%d %H:%M:%S"), 
+                                          NA),
+         DELIVERY_DATETIME_INF2 = if_else(!is.na(DELIV_DSSTDAT_INF2) & !is.na(DELIV_DSSTTIM_INF2),
+                                          as.POSIXct(paste(DELIV_DSSTDAT_INF2, DELIV_DSSTTIM_INF2), format = "%Y-%m-%d %H:%M:%S"), 
+                                          NA),
+         DELIVERY_DATETIME_INF3 = if_else(!is.na(DELIV_DSSTDAT_INF3) & !is.na(DELIV_DSSTTIM_INF3),
+                                          as.POSIXct(paste(DELIV_DSSTDAT_INF3, DELIV_DSSTTIM_INF3), format = "%Y-%m-%d %H:%M:%S"), 
+                                          NA),
+         DELIVERY_DATETIME_INF4 = if_else(!is.na(DELIV_DSSTDAT_INF4) & !is.na(DELIV_DSSTTIM_INF4),
+                                          as.POSIXct(paste(DELIV_DSSTDAT_INF4, DELIV_DSSTTIM_INF4), format = "%Y-%m-%d %H:%M:%S"), 
+                                          NA)) %>% 
+  # Define maternal delivery date as the earliest infant delivery date
+  mutate(MAT_DELIVERY_DATE = pmin(DELIV_DSSTDAT_INF1, DELIV_DSSTDAT_INF2, DELIV_DSSTDAT_INF3, DELIV_DSSTDAT_INF4, na.rm = TRUE)) %>% 
+  select (MOMID, PREGID, MAT_DELIVERY_DATE) %>% 
+  filter (!is.na(MAT_DELIVERY_DATE))
+
+
+form_visitdate_map <- c(
+  MNH00 = "SCRN_OBSSTDAT",
+  MNH01 = "US_OHOSTDAT",
+  MNH02 = "SCRN_OBSSTDAT",
+  MNH03 = "SD_OBSSTDAT",
+  MNH04 = "ANC_OBSSTDAT",
+  MNH05 = "ANT_PEDAT",
+  MNH06 = "DIAG_VSDAT",
+  MNH07 = "MAT_SPEC_COLLECT_DAT",
+  MNH08 = "LBSTDAT",
+  MNH09 = "MAT_LD_OHOSTDAT",
+  MNH10 = "VISIT_OBSSTDAT",
+  MNH11 = "VISIT_OBSSTDAT",
+  MNH12 = "VISIT_OBSSTDAT",
+  MNH13 = "VISIT_OBSSTDAT",
+  MNH14 = "VISIT_OBSSTDAT",
+  MNH15 = "OBSSTDAT",
+  MNH16 = "VISDAT",
+  MNH17 = "VISDAT",
+  MNH18 = "VISDAT",
+  MNH19 = "OBSSTDAT",
+  MNH20 = "OBSSTDAT",
+  MNH21 = "AESTDAT",
+  MNH22 = "DVSTDAT",
+  MNH23 = "CLOSE_DSSTDAT",
+  MNH24 = "CLOSE_DSSTDAT",
+  MNH25 = "OBSSTDAT",
+  MNH26 = "FTGE_OBSTDAT",
+  MNH36 = "VISIT_OBSSTDAT"
+)
+
+# Convert mapping to a data frame
+form_map_df <- tibble::tibble(
+  form = names(form_visitdate_map),
+  visit_date_var = unname(form_visitdate_map)
+)
+
+# Query 3: ANC VISITS after delivery (should not happen) ----
+all_anc_visits <- data_long %>% 
+  left_join(form_map_df, by = "form") %>%
+  filter (TYPE_VISIT %in% c(1:5, 13) & PREGID %in% mnh09_sub$PREGID & !is.na(VisitDate)) %>% 
+  distinct(MOMID, PREGID, VisitDate, TYPE_VISIT, form, .keep_all = TRUE) %>% 
+  inner_join(mnh09_sub, by = c("MOMID","PREGID")) %>% 
+  mutate(VisitDate = ymd(parse_date_time(VisitDate, 
+                                         orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>% 
+  mutate(
+    Date_diff =  abs(as.numeric(difftime(VisitDate, MAT_DELIVERY_DATE, units = "days"))),
+    Query = if_else(VisitDate > MAT_DELIVERY_DATE,
+                    "ANC Visit Date After Pregnancy End Date",
+                    "No Query")) %>%
+  filter(Query != "No Query") 
+
+# If no queries, return a one-row "No Query" message
+if (nrow(all_anc_visits) > 0) {
+  
+  anc_visit_query  <-  all_anc_visits %>% 
+    mutate(
+      Variable_Name = visit_date_var,
+      Variable_Value = VisitDate
+    ) %>%
+    select(SCRNID, MOMID, PREGID, VisitDate, TYPE_VISIT, form,
+           Variable_Name, Variable_Value, Query, MAT_DELIVERY_DATE)
+  
+  anc_visit_query <- anc_visit_query %>%
+    mutate(
+      VisitType = TYPE_VISIT,
+      EditType = Query,
+      INFANTID = NA_character_,
+      Form = form,
+      QUERYID = paste0(Form, "_", VisitDate, "_", PREGID, "_", EditType, "_", Variable_Value, "_", "17")
+    ) %>%
+    select(QUERYID, SCRNID, MOMID, PREGID, INFANTID, VisitType, VisitDate,
+           Form, Variable_Name, Variable_Value, EditType) %>%
+    mutate(across(everything(), as.character))
+  
+  
+  names(anc_visit_query) <- c("QueryID", "ScrnID", "MomID", "PregID", "InfantID", 
+                              "VisitType", "VisitDate", "Form", "Variable Name", 
+                              "Variable Value", "EditType")
+  
+  ANC_export_query <- cbind(anc_visit_query,
+                            UploadDate = UploadDate, 
+                            FieldType = "Number", 
+                            DateEditReported = format(Sys.time(), "%Y-%m-%d"))
+  
+  ANC_export_query$`Variable Value` <- as.character(ANC_export_query$`Variable Value`)
+  
+  ANC_export_query$Form_Edit_Type <- paste(ANC_export_query$Form,"_",ANC_export_query$EditType)
+  
+  save(ANC_export_query, file = paste0(path_to_save, "/ANC_export_query.rda"))
+  
+} else {print ("No ANC Visit Date Discrepancy")}
+
+
+# Query 4: PNC VISITS before delivery (should not happen) ----  
+all_pnc_visits <- data_long %>% 
+  left_join(form_map_df, by = "form") %>%
+  filter (TYPE_VISIT %in% c(7:12, 14) & PREGID %in% mnh09_sub$PREGID & !is.na(VisitDate)) %>% 
+  distinct(MOMID, PREGID, VisitDate, TYPE_VISIT, form, .keep_all = TRUE)%>% 
+  inner_join(mnh09_sub, by = c("MOMID","PREGID")) %>% 
+  mutate(VisitDate = ymd(parse_date_time(VisitDate, 
+                                         orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")))) %>%
+  filter (VisitDate > ymd("2007-08-08")) %>% #filter default value dates
+  mutate(
+    Date_diff =  abs(as.numeric(difftime(VisitDate, MAT_DELIVERY_DATE, units = "days"))),
+    Query = if_else(VisitDate < MAT_DELIVERY_DATE,
+                    "PNC Visit Date Before Pregnancy End Date",
+                    "No Query")) %>%
+  filter(Query != "No Query") 
+
+# If no queries, return a one-row "No Query" message
+if (nrow(all_pnc_visits) > 0) {
+  
+  pnc_visit_query  <-  all_pnc_visits %>% 
+    mutate(
+      Variable_Name = visit_date_var,
+      Variable_Value = VisitDate
+    ) %>%
+    select(SCRNID, MOMID, PREGID, VisitDate, TYPE_VISIT, form,
+           Variable_Name, Variable_Value, Query, MAT_DELIVERY_DATE)
+  
+  pnc_visit_query <- pnc_visit_query %>%
+    mutate(
+      VisitType = TYPE_VISIT,
+      EditType = Query,
+      INFANTID = NA_character_,
+      Form = form,
+      QUERYID = paste0(Form, "_", VisitDate, "_", PREGID, "_", EditType, "_", Variable_Value, "_", "17")
+    ) %>%
+    select(QUERYID, SCRNID, MOMID, PREGID, INFANTID, VisitType, VisitDate,
+           Form, Variable_Name, Variable_Value, EditType) %>%
+    mutate(across(everything(), as.character))
+  
+  
+  names(pnc_visit_query) <- c("QueryID", "ScrnID", "MomID", "PregID", "InfantID", 
+                              "VisitType", "VisitDate", "Form", "Variable Name", 
+                              "Variable Value", "EditType")
+  
+  PNC_export_query <- cbind(pnc_visit_query,
+                            UploadDate = UploadDate, 
+                            FieldType = "Number", 
+                            DateEditReported = format(Sys.time(), "%Y-%m-%d"))
+  
+  PNC_export_query$`Variable Value` <- as.character(PNC_export_query$`Variable Value`)
+  
+  # combine form/edit type var 
+  PNC_export_query$Form_Edit_Type <- paste(PNC_export_query$Form,"_",PNC_export_query$EditType)
+  
+  save(PNC_export_query, file = paste0(path_to_save, "/PNC_export_query.rda"))
+  
+} else {print ("No PNC Visit Date Discrepancy")}
+
+
+
+#Optional - Testing for MAT_VISIT and anc variables 
+#Test anc visits ----
+# Step 1: Get the list of forms from anc query output
+if (nrow(all_anc_visits) > 0) {
+forms_to_check_anc <- unique(all_anc_visits$form)
+
+# Step 2: Create mapping of form to date variable (as already joined in form_map_df)
+form_map_filtered <- form_map_df %>%
+  filter(form %in% forms_to_check_anc)
+
+# Step 3: Loop through each form and extract the cleaned summary
+visit_lookup_list_anc <- map(form_map_filtered$form, function(form_name) {
+  form_number <- str_extract(form_name, "\\d{2}")
+  
+  date_var <- form_map_filtered %>% filter(form == form_name) %>% pull(visit_date_var)
+  
+  mat_visit_var <- paste0("MAT_VISIT_MNH", form_number)
+  
+  # Construct the name of the wide dataset (e.g., mnh08_df)
+  df_name <- tolower(form_name)
+  
+  
+  if (!exists(df_name, envir = .GlobalEnv)) return(NULL)  # skip if data not loaded
+  
+  df <- get(df_name, envir = .GlobalEnv)
+  
+  # Skip if date or MAT_VISIT variable doesn't exist in data
+  if (!all(c(date_var, mat_visit_var, "MOMID", "PREGID", "TYPE_VISIT") %in% names(df))) {
+    return(NULL)
+  }
+  
+  df_filtered <- df %>%
+    filter(!is.na(MOMID) & !is.na(PREGID) & !is.na(TYPE_VISIT)) %>%
+    mutate(
+      VisitDate = ymd(parse_date_time(.data[[date_var]],
+                                      orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")
+      ))
+    ) %>%
+    select(MOMID, PREGID, TYPE_VISIT, VisitDate, !!sym(mat_visit_var)) %>%
+    rename(MAT_VISIT = !!sym(mat_visit_var)) %>%
+    mutate(Form = form_name) 
+  
+  return(df_filtered)
+})
+
+# Step 4: Combine all results
+visit_lookup_anc <- bind_rows(visit_lookup_list_anc) %>% 
+  mutate (TYPE_VISIT = as.character(TYPE_VISIT)) %>%
+  rename (form = Form) %>% 
+  distinct(MOMID, PREGID, TYPE_VISIT, VisitDate, form, .keep_all = TRUE)
+
+
+visit_lookup_anc_f <- visit_lookup_anc %>%
+  right_join(
+    all_anc_visits %>% 
+      select(MOMID, PREGID, TYPE_VISIT, VisitDate, MAT_DELIVERY_DATE, visit_date_var, form ),
+    by = c("MOMID", "PREGID", "TYPE_VISIT", "VisitDate", "form")
+  )
+} else {print ("No ANC Visit Date Discrepancy")}
+
+
+#Test pnc Visits ----
+# Step 1: Get the list of forms from pnc query output
+if (nrow(all_pnc_visits) > 0) {
+forms_to_check_pnc <- unique(all_pnc_visits$form)
+
+# Step 2: Create mapping of form to date variable (as already joined in form_map_df)
+form_map_filtered <- form_map_df %>%
+  filter(form %in% forms_to_check_pnc)
+
+# Step 3: Loop through each form and extract the cleaned summary
+visit_lookup_list_pnc <- map(form_map_filtered$form, function(form_name) {
+  
+  form_number <- str_extract(form_name, "\\d+")
+  
+  # Handle both MAT_VISIT and INF_VISIT variants
+  mat_visit_var <- paste0("MAT_VISIT_MNH", form_number)
+  inf_visit_var <- paste0("INF_VISIT_MNH", form_number)
+  
+  # Get visit date variable
+  form_map_entry <- form_map_filtered %>% filter(form == form_name)
+  if (nrow(form_map_entry) == 0) return(NULL)
+  
+  date_var <- form_map_entry$visit_date_var
+  
+  # Construct the name of the wide dataset (e.g., mnh08_df)
+  df_name <- tolower(form_name)
+  
+  if (!exists(df_name, envir = .GlobalEnv)) return(NULL)
+  
+  df <- get(df_name, envir = .GlobalEnv)
+  
+  # Determine which VISIT variable to use
+  visit_flag_var <- case_when(
+    mat_visit_var %in% names(df) ~ mat_visit_var,
+    inf_visit_var %in% names(df) ~ inf_visit_var,
+    TRUE ~ NA_character_
+  )
+  
+  # Exit if no valid visit variable or required fields
+  if (is.na(visit_flag_var) || !all(c(date_var, "MOMID", "PREGID", "TYPE_VISIT") %in% names(df))) {
+    return(NULL)
+  }
+  
+  df_filtered <- df %>%
+    filter(!is.na(MOMID) & !is.na(PREGID) & !is.na(TYPE_VISIT)) %>%
+    mutate(
+      VisitDate = ymd(parse_date_time(.data[[date_var]],
+                                      orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%y")
+      ))
+    ) %>%
+    select(MOMID, PREGID, TYPE_VISIT, VisitDate, !!sym(visit_flag_var)) %>%
+    rename(MAT_VISIT = !!sym(visit_flag_var)) %>%
+    mutate(Form = form_name)
+  
+  return(df_filtered)
+})
+
+# Step 4: Combine all results
+visit_lookup_pnc <- bind_rows(visit_lookup_list_pnc) %>% 
+  mutate (TYPE_VISIT = as.character(TYPE_VISIT)) %>%
+  rename (form = Form) %>% 
+  distinct(MOMID, PREGID, TYPE_VISIT, VisitDate, form, .keep_all = TRUE)
+
+
+visit_lookup_pnc_f <- visit_lookup_pnc %>%
+  right_join(
+    all_pnc_visits %>% 
+      select(MOMID, PREGID, TYPE_VISIT, VisitDate, MAT_DELIVERY_DATE, visit_date_var, form ),
+    by = c("MOMID", "PREGID", "TYPE_VISIT", "VisitDate", "form")
+  ) 
+} else {print ("No PNC Visit Date Discrepancy")}
+
+# *************************************************************************************************
+# Query 5: Visit Completed But Visit Date Missing or Default (multi-date, conditional requirements) ----
+# *************************************************************************************************
+
+# 1) CONFIG
+# (A) ALL date variables for each form - include ALL variables that need to be checked
+visit_date_vars <- list(
+  mnh00 = c("SCRN_OBSSTDAT"),
+  mnh01 = c("US_OHOSTDAT"),
+  mnh02 = c("SCRN_OBSSTDAT"),
+  mnh03 = c("SD_OBSSTDAT"),
+  mnh04 = c("ANC_OBSSTDAT", "HOSP_OHOSTDAT", "HOSP_OHOENDAT"),
+  mnh05 = c("ANT_PEDAT"),
+  mnh06 = c("DIAG_VSDAT"),
+  mnh07 = c("MAT_SPEC_COLLECT_DAT"),
+  mnh08 = c("LBSTDAT"),
+  mnh09 = c("MAT_LD_OHOSTDAT"),
+  mnh10 = c("VISIT_OBSSTDAT", "TRANSFER_OHOENDAT" ),
+  mnh11 = c("VISIT_OBSSTDAT"),
+  mnh12 = c("VISIT_OBSSTDAT"),
+  mnh13 = c("VISIT_OBSSTDAT"),
+  mnh14 = c("VISIT_OBSSTDAT"),
+  mnh15 = c("OBSSTDAT"),
+  mnh16 = c("VISDAT"),
+  mnh17 = c("VISDAT"),
+  mnh18 = c("VISDAT"),
+  mnh19 = c("OBSSTDAT", "MAT_EST_OHOSTDAT", 
+            "OHOSTDAT", "ADMIT_OHOSTDAT", 
+            "ADMIT_OHOENDAT"),  # ALL date variables for mnh19
+  mnh20 = c("OBSSTDAT", "UNPLANNED_VISDAT", "EST_UNPLANNED_VISDAT"),  # ALL date variables for mnh20
+  mnh25 = c("MAT_EST_OHOSTDAT"),
+  mnh26 = c("FTGE_OBSTDAT"),
+  mnh36 = c("VISIT_OBSSTDAT")
+)
+
+# (B) Forms that don't require vital variable check (no visit completion status)
+forms_without_vital <- c("mnh00","mnh02", "mnh19", "mnh20")
+
+# (C) Conditional requirements for specific variables
+visit_date_specs <- list(
+  mnh04 = tibble::tribble(
+    ~var,               ~required_when,
+    "HOSP_OHOSTDAT",  "HOSP_OHOOCCUR %in% c(1)",
+    "HOSP_OHOENDAT",  "HOSP_OHOOCCUR %in% c(1)",
+  ),
+  
+  mnh09 = tibble::tribble(
+    ~var,               ~required_when,
+    "MAT_LD_OHOSTDAT",  "MAT_LD_OHOLOC %in% c(1,88)"
+  ),
+  mnh10 = tibble::tribble(
+    ~var,               ~required_when,
+    "TRANSFER_OHOENDAT",  "DEST_DISCHARGE_OHOLOC %in% c(1,2,3,88)"
+  ),
+  mnh19 = tibble::tribble(
+    ~var,               ~required_when,
+    "MAT_EST_OHOSTDAT", "OHOSTDAT_YN == 0",
+    "OHOSTDAT",         "OHOSTDAT_YN == 1",
+    "ADMIT_OHOSTDAT",   "VISIT_FAORRES == 3",
+    "ADMIT_OHOENDAT",   "ADMIT_DSTERM == 1",
+  ),
+  mnh20 = tibble::tribble(
+    ~var,                  ~required_when,
+    "UNPLANNED_VISDAT",     "VISDAT_YN == 1",
+    "EST_UNPLANNED_VISDAT", "VISDAT_YN == 0"
+  )
+)
+
+# (D) Invalid dates & parse orders
+invalid_visit_dates <- as.Date(c("1907-07-07", "2007-07-07", "1905-05-05", "1909-07-07","1909-09-09" ))
+common_orders <- c("%m/%d/%Y","%m-%d-%Y","%d/%m/%Y","%d-%m-%Y","%Y-%m-%d","%d-%b-%y","%d-%m-%y")
+
+# Infant vs Maternal prefix helper (adjust if mnh20 is maternal in your schema)
+inf_forms <- c("mnh13", "mnh14", "mnh15", "mnh20", "mnh36")
+
+
+# 2) HELPER: evaluate a condition safely in a data.frame
+
+.eval_required <- function(data, cond_chr) {
+  if (is.null(cond_chr) || is.na(cond_chr) || str_trim(cond_chr) == "") {
+    return(rep(TRUE, nrow(data)))  # always required if no condition
+  }
+  
+  # Check if all variables in the condition exist in the data
+  condition_vars <- all.vars(rlang::parse_expr(cond_chr))
+  missing_vars <- setdiff(condition_vars, names(data))
+  
+  if (length(missing_vars) > 0) {
+    warning("Missing variables in condition '", cond_chr, "': ", paste(missing_vars, collapse = ", "))
+    return(rep(FALSE, nrow(data)))
+  }
+  
+  out <- tryCatch(
+    {
+      cond_expr <- rlang::parse_expr(cond_chr)
+      cond_val  <- rlang::eval_tidy(cond_expr, data)
+      as.logical(replace_na(cond_val, FALSE))  # NA -> FALSE
+    },
+    error = function(e) {
+      warning("Error evaluating condition: ", cond_chr, " - ", e$message)
+      rep(FALSE, nrow(data))
+    }
+  )
+  out
+}
+
+
+# 3) MAIN
+
+missing_visit_date_query <- data.frame()
+
+# Get all form names that exist in the global environment
+all_forms <- ls(pattern = "^mnh[0-9]{2}$", envir = .GlobalEnv)
+cat("Forms found in environment:", paste(all_forms, collapse = ", "), "\n\n")
+
+for (form_name in names(visit_date_vars)) {
+  
+  if (!exists(form_name, where = .GlobalEnv, inherits = FALSE)) {
+    cat("Skipping", form_name, "- not found in environment\n")
+    next
+  }
+  #form_name = "mnh04"
+  form_data <- get(form_name)
+  if (is.null(form_data) || !is.data.frame(form_data) || nrow(form_data) == 0) {
+    cat("Skipping", form_name, "- not a valid dataframe or empty\n")
+    next
+  }
+  
+  cat("Processing form:", form_name, "- Rows:", nrow(form_data), "\n")
+  
+  # Check if this form requires vital variable check
+  if (form_name %in% forms_without_vital) {
+    cat("  Form", form_name, "does not require vital variable check\n")
+    form_subset <- form_data  # Use all rows for forms without vital variable
+  } else {
+    # For forms that DO require vital variable check
+    vital_prefix <- ifelse(form_name %in% inf_forms, "INF_VISIT_", "MAT_VISIT_")
+    vital_var    <- paste0(vital_prefix, toupper(form_name))
+    
+    # Check if vital variable exists
+    if (!vital_var %in% names(form_data)) {
+      cat("  Skipping", form_name, "- missing vital variable:", vital_var, "\n")
+      next
+    }
+    
+    # Completed (1 or 2)
+    form_subset <- form_data %>% filter(!!sym(vital_var) %in% c(1, 2))
+    if (nrow(form_subset) == 0) {
+      cat("  No completed visits in", form_name, "\n")
+      next
+    }
+    cat("  Completed visits:", nrow(form_subset), "\n")
+  }
+  
+  # Get ALL date variables for this form
+  date_vars <- visit_date_vars[[form_name]]
+  cat("  Date variables to check:", paste(date_vars, collapse = ", "), "\n")
+  
+  # Create spec table for this form
+  spec_tbl <- tibble::tibble(var = date_vars, required_when = NA_character_)
+  
+  # Apply conditional requirements if specified
+  if (form_name %in% names(visit_date_specs)) {
+    form_specs <- visit_date_specs[[form_name]]
+    for (i in 1:nrow(form_specs)) {
+      spec_var <- form_specs$var[i]
+      spec_cond <- form_specs$required_when[i]
+      # Update the condition for this variable
+      spec_tbl$required_when[spec_tbl$var == spec_var] <- spec_cond
+    }
+  }
+  
+  # Ensure core columns exist
+  needed <- c("MOMID", "PREGID")
+  if (form_name %in% inf_forms) {
+    needed <- c(needed, "INFANTID")
+  }
+  
+  missing_core <- setdiff(needed, names(form_subset))
+  if (length(missing_core) > 0) {
+    cat("  Skipping", form_name, "- missing core variables:", paste(missing_core, collapse = ", "), "\n")
+    next
+  }
+  
+  # Get current date for comparison
+  current_date <- Sys.Date()
+  
+  # Iterate each date var in the specification
+  for (i in seq_len(nrow(spec_tbl))) {
+    visit_var <- spec_tbl$var[i]
+    req_when  <- spec_tbl$required_when[i]
+    
+    if (!visit_var %in% names(form_subset)) {
+      cat("    Skipping variable", visit_var, "- not found in form\n")
+      next
+    }
+    
+    # Compute "is_required" - this tells us which rows require this date variable
+    is_required <- .eval_required(form_subset, req_when)
+    
+    # Debug: check how many rows are required
+    cat("    Variable:", visit_var, "\n")
+    cat("    Condition:", ifelse(is.na(req_when) || req_when == "", "ALWAYS", req_when), "\n")
+    cat("    Required rows:", sum(is_required, na.rm = TRUE), "/", nrow(form_subset), "\n")
+    
+    # Apply the condition to filter only rows where this date is required
+    form_subset_req <- form_subset
+    if (!is.na(req_when) && req_when != "") {
+      req_condition <- .eval_required(form_subset, req_when)
+      form_subset_req <- form_subset[req_condition, ]
+    }
+    
+    if (nrow(form_subset_req) == 0) {
+      cat("    No rows require this date variable based on condition\n")
+      next
+    }
+    
+    # Parse dates and filter for issues using your preferred format
+    form_subset_req <- form_subset_req %>%
+      mutate(
+        parsed_visit_date_raw = parse_date_time(
+          !!sym(visit_var),
+          orders = common_orders,
+          exact = FALSE
+        ),
+        parsed_visit_date = as.Date(parsed_visit_date_raw)
+      ) %>%
+      filter(is.na(parsed_visit_date) | # missing/failed to parse
+               parsed_visit_date %in% invalid_visit_dates | # default value
+               parsed_visit_date > current_date |  # future dates
+               parsed_visit_date < as.Date("2015-01-01")) # strangely early
+    
+    if (nrow(form_subset_req) > 0) {
+      
+      get_safe_col <- function(data, col_name) {
+        if (col_name %in% names(data)) {
+          as.character(data[[col_name]])
+        } else {
+          NA_character_
+        }
+      }
+  
+      flagged <- form_subset_req %>%
+          mutate(
+            ScrnID = get_safe_col(., "SCRNID"),
+            InfantID = get_safe_col(., "INFANTID"),
+            PregID = get_safe_col(., "PREGID"),
+            MomID = get_safe_col(., "MOMID"),
+            VisitDate = !!sym(visit_var),
+            VisitType = get_safe_col(., "TYPE_VISIT"),
+            `Variable Name` = visit_var,
+            `Variable Value` = !!sym(visit_var),
+            Form = toupper(form_name),
+            RequiredWhen = ifelse(is.na(req_when) | req_when == "", "ALWAYS", req_when),
+            IssueType = case_when(
+              is.na(parsed_visit_date) ~ "Missing Date",
+              parsed_visit_date > current_date ~ "Future Date",
+              parsed_visit_date %in% invalid_visit_dates ~ "Invalid Default Date",
+              parsed_visit_date < as.Date("2015-01-01") ~ "Date Too Early",
+              TRUE ~ "Unknown Issue"
+            )
+          ) %>%
+        
+        # Now just select without renaming
+        select(ScrnID, MomID, PregID, InfantID, VisitType, VisitDate, Form, `Variable Name`, `Variable Value`) %>%
+        mutate(FieldType = "Text", EditType = "Invalid/Missing Visit Date") 
+      
+      missing_visit_date_query <- bind_rows(missing_visit_date_query, flagged)
+      cat("    Flagged rows:", nrow(form_subset_req), "\n")
+    } else {
+      cat("    No date issues found\n")
+    }
+    cat("\n")
+  }
+}
+
+
+# 4) EXPORT
+
+if (nrow(missing_visit_date_query) > 0) {
+  VisitDateMissing_query <- missing_visit_date_query %>%
+    mutate(
+      QueryID = NA_character_,
+      DateEditReported = format(Sys.time(), "%Y-%m-%d"),
+      UploadDate = UploadDate,
+      Form_Edit_Type = paste0(Form, "_", EditType),
+      QueryID = paste0(Form_Edit_Type, "_", MomID, "_", PregID, "_", `Variable Value`, "_13")
+    ) %>%
+    mutate(across(everything(), as.character))
+  
+  save(VisitDateMissing_query, file = paste0(path_to_save, "/VisitDateMissing_query.rda"))
+  cat("Saved query with", nrow(VisitDateMissing_query), "records\n")
+} else {
+  print("No Invalid or Missing Visit Date")
+}
+
+# *************************************************************************************************
+# Query 6: Delivery Reported but Missing/Invalid Delivery Date ----
+
+# Description:
+# Checks MNH09 for cases where an infant ID exists but the associated delivery date is missing.
+#
+# Logic:
+# - Pivots MNH09 to long format per infant.
+# - Flags rows where a valid infant ID is given but delivery date is NA or a default value.
+# *************************************************************************************************
+
+invalid_infant_ids <- c("NA", "na", "n/a", "N/A", ""," ")
+invalid_dates <- as_date(c("1907-07-07", "2007-07-07", 
+                           "1905-05-05","1909-07-07"))
+
+mnh09_delivery_flagged <- mnh09 %>%
+  filter(MAT_VISIT_MNH09 %in% c(1, 2)) %>%
+  select(MOMID, PREGID, MAT_VISIT_MNH09, MAT_LD_OHOSTDAT,
+         INFANTID_INF1, INFANTID_INF2, INFANTID_INF3, INFANTID_INF4,
+         DELIV_DSSTDAT_INF1, DELIV_DSSTDAT_INF2, DELIV_DSSTDAT_INF3, DELIV_DSSTDAT_INF4) %>%
+  pivot_longer(
+    cols = starts_with("INFANTID_INF") | starts_with("DELIV_DSSTDAT_INF"),
+    names_to = c(".value", "InfIndex"),
+    names_pattern = "(INFANTID_INF|DELIV_DSSTDAT_INF)(\\d)"
+  ) %>%
+  mutate(
+    DELIV_DSSTDAT = parse_date_time(
+      trimws(as.character(DELIV_DSSTDAT_INF)),
+      orders = c(
+        "d/m/Y", "d-m-Y", "Y-m-d",    # day first or ISO
+        "d-b-y", "d-m-y",             # abbreviated/short
+        "m/d/y", "m-d-y"              # U.S. style: month-day-year
+      ),
+      exact = FALSE
+    ),
+    has_infant = !is.na(INFANTID_INF) & !(INFANTID_INF %in% invalid_infant_ids),
+    missing_delivery_date = is.na(DELIV_DSSTDAT) | 
+      as_date(DELIV_DSSTDAT) %in% invalid_dates|
+      DELIV_DSSTDAT < ymd("2018-01-01") |
+      DELIV_DSSTDAT > ymd(UploadDate) ,
+    Query = if_else(has_infant & missing_delivery_date, 1, 0),
+    EditType = if_else(Query == 1, "Invalid/Missing Delivery Date", NA_character_)
+  ) %>%
+  filter(Query == 1) %>%
+  mutate(
+    Form = "MNH09",
+    VisitDate = MAT_LD_OHOSTDAT,
+    `Variable Name` = paste0("DELIV_DSSTDAT_INF", InfIndex),
+    `Variable Value` = DELIV_DSSTDAT_INF,
+    ScrnID = NA,
+    VisitType = NA,
+    InfantID = INFANTID_INF,
+    QueryID = paste0(Form, "_", PREGID, "_", `Variable Value`, "_15"),  # Edit Type ID 15
+    Form_Edit_Type = paste0(Form, "_", EditType)
+  ) %>%
+  select(QueryID, ScrnID, MomID = MOMID, PregID = PREGID, InfantID, VisitType, VisitDate,
+         Form, `Variable Name`, `Variable Value`, EditType, Form_Edit_Type)
+
+
+if (exists("mnh09_delivery_flagged") && nrow(mnh09_delivery_flagged) > 0) {
+  
+  
+  Deliverydate_Missing_query  = cbind(mnh09_delivery_flagged,
+                                FieldType = "Date",
+                                UploadDate = UploadDate,
+                                DateEditReported = format(Sys.time(), "%Y-%m-%d")) %>%
+    mutate(across(everything(), as.character))
+  
+  save(Deliverydate_Missing_query, file = paste0(path_to_save, "Deliverydate_Missing_query.rda"))
+  
+} else {print("No Invalid or Missing Delivery Date")}
