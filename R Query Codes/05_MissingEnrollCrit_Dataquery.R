@@ -116,7 +116,7 @@ if (dim(MomidNotEligible)[1] >= 1){
     mutate(QueryID = paste0(Form, "_", VisitDate, "_",MomID, "_",`Variable Name`, "_", `Variable Value`, "_", "08"))
   
   ## export 
-  save(MomidNotEligible_query, file = paste0(path_to_save,"/queries/MomidNotEligible_query.rda"))
+  save(MomidNotEligible_query, file = paste0(path_to_save,"MomidNotEligible_query.rda"))
   
 }
 
@@ -185,8 +185,8 @@ if (dim(EligibilityReason)[1] >= 1){
   Comment <- merge(QueryID, EligibilityReason, by = "SCRNID")
   
   # Export data
-  save(InEligibilityCriteria_query, file = paste0(path_to_save,"/queries/InEligibilityCriteria_query.rda"))
-  save(Comment, file = paste0(path_to_save,"/queries/InEligibilityCriteria_comments.rda"))
+  save(InEligibilityCriteria_query, file = paste0(path_to_save,"InEligibilityCriteria_query.rda"))
+  save(Comment, file = paste0(path_to_save,"InEligibilityCriteria_comments.rda"))
 }
 
 # library(openxlsx)
@@ -450,6 +450,205 @@ if (exists("ipc_forms_merged_query")==TRUE) {
   
   Missing_Ipc_Outcome_query <- ipc_forms_merged_query_to_export
   ## export variable checking query 
-  save(Missing_Ipc_Outcome_query, file = paste0(path_to_save, "/queries/Missing_Ipc_Outcome_query.rda"))
+  save(Missing_Ipc_Outcome_query, file = paste0(path_to_save, "Missing_Ipc_Outcome_query.rda"))
   
 }
+
+####################################################################################################
+# CONFIRM THAT ENROLLED IDS HAVE PRESCREENING FORM ----
+####################################################################################################
+
+## subset all MOMIDs that have forms 03-25 from MNH02 (enrollment form)
+momid_meet_enroll <- mnh02 %>%
+  mutate (MEET_ENROLL_CRIT = case_when(AGE_IEORRES == 1 &
+                                      PC_IEORRES == 1 &
+                                      CATCHMENT_IEORRES == 1 &
+                                      CATCH_REMAIN_IEORRES == 1 &
+                                      CONSENT_IEORRES == 1 ~ 1,
+                                      TRUE ~ 0)) %>%
+  filter(MEET_ENROLL_CRIT == 1) %>%
+  select(SCRNID, MEET_ENROLL_CRIT)
+
+## Among these women who the sites are considering "enrolled", do they meet our enrollment criteria?
+
+missing_mnh00 <- mnh00 %>%
+  mutate(MHH00_HAVE = 1) %>%
+  right_join(momid_meet_enroll, by = c("SCRNID")) %>%
+  filter (MEET_ENROLL_CRIT == 1 & is.na(MHH00_HAVE)) %>%
+  mutate (EDIT_TYPE = "ScrnID Missing Prescreening Form")
+
+if (nrow (missing_mnh00) >= 1) {
+
+    # extract variables included in query template
+    missing_mnh00_query_to_export <- missing_mnh00 %>%
+      mutate(MOMID = NA,
+             PREGID = NA,
+             INFANTID = NA,
+             TYPE_VISIT = NA,
+             VISITDATE = NA,
+             FORM = "MNH00",
+             VARIABLENAME = "",
+             VARIABLEVALUE = "",
+             FIELD_TYPE = "Text") %>%
+      select(SCRNID, MOMID, PREGID, INFANTID, TYPE_VISIT, VISITDATE, FORM, VARIABLENAME, VARIABLEVALUE,  FIELD_TYPE, EDIT_TYPE)
+
+    # update naming
+    names(missing_mnh00_query_to_export) = c("ScrnID","MomID", "PregID","InfantID","VisitType", "VisitDate", "Form", "Variable Name",  "Variable Value","FieldType", "EditType")
+
+    ## add additional columns
+    missing_mnh00_query_to_export = cbind(QueryID = NA,
+                                             UploadDate = UploadDate,
+                                          missing_mnh00_query_to_export,
+                                             DateEditReported = format(Sys.time(), "%Y-%m-%d"))
+
+    # combine form/edit type var
+    missing_mnh00_query_to_export$Form_Edit_Type <- paste(missing_mnh00_query_to_export$Form,"_",missing_mnh00_query_to_export$EditType)
+
+    ## assign queryid -- edit type id for invalid visit types is 06
+    missing_mnh00_query_to_export <- missing_mnh00_query_to_export %>%
+      mutate(QueryID = paste0(Form, "_", ScrnID, "_", EditType))
+
+    Missing_MNH00_query <- missing_mnh00_query_to_export %>% 
+      mutate(across(everything(), as.character))
+    
+    ## export variable checking query
+    save(Missing_MNH00_query, file = paste0(path_to_save, "Missing_MNH00_query.rda"))
+
+} else {print ("No enrolled scrnid missing prescreening form")}
+
+
+####################################################################################################
+# CONFIRM THAT THERE IS ONLY ONE MOMID FOR EACH PARTICIPANT ----
+####################################################################################################
+
+# Helper function to collapse form ranges
+collapse_form_ranges <- function(forms) {
+  forms <- unique(forms)
+  forms <- sort(forms)
+  
+  # Extract prefix and numeric parts
+  form_df <- data.frame(
+    form = forms,
+    prefix = str_extract(forms, "^[A-Za-z]+"),
+    num = as.integer(str_extract(forms, "\\d+$")),
+    stringsAsFactors = FALSE
+  )
+  
+  collapsed <- form_df %>%
+    arrange(prefix, num) %>%
+    group_by(prefix) %>%
+    group_split() %>%
+    lapply(function(df) {
+      # Identify runs
+      runs <- rle(c(0, diff(df$num)) == 1)
+      run_lengths <- runs$lengths
+      values <- df$form
+      
+      compressed <- c()
+      i <- 1
+      while (i <= length(values)) {
+        len <- run_lengths[1]
+        if (len >= 3) {
+          compressed <- c(compressed, paste0(values[i], "-", values[i + len - 1]))
+        } else {
+          compressed <- c(compressed, values[i:(i + len - 1)])
+        }
+        values <- values[-(1:len)]
+        run_lengths <- run_lengths[-1]
+      }
+      paste(compressed, collapse = ", ")
+    }) %>%
+    unlist()
+  
+  return(paste(collapsed, collapse = ", "))
+}
+
+
+
+na_variations <- c("NA", "na", "n/a", "N/A", "", NA)
+
+# Step 1: Get valid PREGID-MOMID pairs
+pregid_momid_pairs <- data_long %>%
+  filter(!MOMID %in% na_variations & !is.na(MOMID),
+         !PREGID %in% na_variations & !is.na(PREGID)) %>%
+  distinct(PREGID, MOMID, .keep_all = TRUE)
+
+# Step 2: Identify PREGIDs with more than one MOMID
+violating_pregids <- pregid_momid_pairs %>%
+  group_by(PREGID) %>%
+  summarise(n_momids = n_distinct(MOMID), .groups = "drop") %>%
+  filter(n_momids > 1) %>%
+  ungroup()
+
+# Step 3: Join to get the full violating pairs
+violating_pairs <- pregid_momid_pairs %>%
+  filter(PREGID %in% violating_pregids$PREGID)
+
+# Step 4: Filter original data to just those violating combinations
+pregid_mismatch <- data_long %>%
+  distinct(MOMID, PREGID, TYPE_VISIT, INFANTID, form, VisitDate, .keep_all = TRUE) %>%
+  semi_join(violating_pairs, by = c("PREGID", "MOMID")) %>%
+  select(all_of(c("SCRNID", "MOMID", "PREGID", "INFANTID", "TYPE_VISIT", "VisitDate", "form")))  %>%
+  distinct(MOMID, PREGID, form, .keep_all = TRUE)
+
+# Step 3: Summarize MOMID usage per PREGID across visits
+# Step 3: Summarize MOMID usage per PREGID across visits
+pregid_mismatch_query <- pregid_mismatch %>%
+  group_by(PREGID, MOMID) %>%
+  summarise(
+    forms = collapse_form_ranges(form),
+    visits = paste(na.omit(unique(TYPE_VISIT)), collapse = ", "),  # remove NA values
+    n_visits = n(),
+    .groups = "drop"
+  ) %>%
+  group_by(PREGID) %>%
+  mutate(
+    momids_for_pregid = paste(unique(MOMID), collapse = ", "),
+    n_momids_for_pregid = n_distinct(MOMID)
+  ) %>%
+  ungroup() %>%
+  arrange(PREGID, MOMID) %>%
+  mutate( EDIT_TYPE = "Multiple MomIDs for single PregID",
+          VARIABLENAME = "MomID",
+          VARIABLEVALUE = paste0("PREGID linked to ", n_momids_for_pregid, 
+                            " MOMIDs [", momids_for_pregid, "]"))
+
+
+
+if (nrow (pregid_mismatch_query) >= 1) {
+  
+  # extract variables included in query template
+  pregid_mismatch_query_to_export <- pregid_mismatch_query %>%
+    mutate(TYPE_VISIT = visits,
+           SCRNID = NA,
+           INFANTID = NA,
+           VISITDATE = NA,
+           FORM = forms,
+           FIELD_TYPE = "Text") %>%
+    select(SCRNID, MOMID, PREGID, INFANTID, TYPE_VISIT, VISITDATE, FORM, VARIABLENAME, VARIABLEVALUE,  FIELD_TYPE, EDIT_TYPE)
+  
+  # update naming
+  names(pregid_mismatch_query_to_export) = c("ScrnID","MomID", "PregID","InfantID","VisitType", "VisitDate", "Form", "Variable Name",  "Variable Value","FieldType", "EditType")
+  
+  ## add additional columns
+  pregid_mismatch_query_to_export = cbind(QueryID = NA,
+                                        UploadDate = UploadDate,
+                                        pregid_mismatch_query_to_export,
+                                        DateEditReported = format(Sys.time(), "%Y-%m-%d"))
+  
+  # combine form/edit type var
+  pregid_mismatch_query_to_export$Form_Edit_Type <- paste(pregid_mismatch_query_to_export$Form,"_",pregid_mismatch_query_to_export$EditType)
+  
+  ## assign queryid -- edit type id for invalid visit types is 06
+  pregid_mismatch_query_to_export <- pregid_mismatch_query_to_export %>%
+    mutate(QueryID = paste0(Form, "_",MomID, "_", EditType))
+  
+  Mismatch_MomID_query <- pregid_mismatch_query_to_export %>% 
+    mutate(across(everything(), as.character))
+  
+  ## export variable checking query
+  save(Mismatch_MomID_query, file = paste0(path_to_save, "Mismatch_MomID_query.rda"))
+  
+} else {print ("No mismatched MOMID/PREGID Pair")}
+
+
