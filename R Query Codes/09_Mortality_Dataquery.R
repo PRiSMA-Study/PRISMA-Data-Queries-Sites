@@ -193,7 +193,7 @@ if (exists("inf_dead_then_alive_query")){
       mutate(QueryID = paste0(Form, "_", VisitDate, "_",PregID, "_", InfantID,  "_", "11"))
     
     # Export data
-    save(Infant_DeadThenAlive_query, file = paste0(path_to_save,"/queries/Infant_DeadThenAlive_query.rda"))
+    save(Infant_DeadThenAlive_query, file = paste0(path_to_save,"Infant_DeadThenAlive_query.rda"))
     
   }
 }
@@ -395,7 +395,7 @@ if (exists("stillbirth_then_alive_query")){
       mutate(QueryID = paste0(Form, "_", VisitDate, "_",PregID, "_", InfantID,  "_", "11"))
     
     # Export data
-    save(StillbirthThenAlive_query, file = paste0(path_to_save,"/queries/StillbirthThenAlive_query.rda"))
+    save(StillbirthThenAlive_query, file = paste0(path_to_save,"StillbirthThenAlive_query.rda"))
     
   }
 }
@@ -439,7 +439,7 @@ if (exists("inf_dead_than_alive_extra_tab")== TRUE & exists("stillbirth_than_ali
     relocate(QueryID, .before = MOMID)
   
   # Export data
-  save(inf_dead_than_alive_extra_tab, file = paste0(path_to_save,"/queries/inf_dead_than_alive_extra_tab.rda"))
+  save(inf_dead_than_alive_extra_tab, file = paste0(path_to_save,"inf_dead_than_alive_extra_tab.rda"))
   
 } else if (exists("inf_dead_than_alive_extra_tab")== TRUE & exists("stillbirth_than_alive_extra_tab")== FALSE) {
   
@@ -448,7 +448,7 @@ if (exists("inf_dead_than_alive_extra_tab")== TRUE & exists("stillbirth_than_ali
     relocate(QueryID, .before = MOMID)
   
   # Export data
-  save(inf_dead_than_alive_extra_tab, file = paste0(path_to_save,"/queries/inf_dead_than_alive_extra_tab.rda"))
+  save(inf_dead_than_alive_extra_tab, file = paste0(path_to_save,"inf_dead_than_alive_extra_tab.rda"))
   
 } else if (exists("inf_dead_than_alive_extra_tab")== FALSE & exists("stillbirth_than_alive_extra_tab")== TRUE) {
   
@@ -457,7 +457,7 @@ if (exists("inf_dead_than_alive_extra_tab")== TRUE & exists("stillbirth_than_ali
     relocate(QueryID, .before = MOMID)
   
   # Export data
-  save(inf_dead_than_alive_extra_tab, file = paste0(path_to_save,"/queries/inf_dead_than_alive_extra_tab.rda"))
+  save(inf_dead_than_alive_extra_tab, file = paste0(path_to_save,"inf_dead_than_alive_extra_tab.rda"))
   
 }
 
@@ -609,7 +609,7 @@ if (nrow(mom_closeout_long) > 0) {
     mutate_all (as.character())
   
   # Save the query results to an RDA file
-  save(MomIDCloseout_query, file = paste0(path_to_save, "/queries/MomIDCloseout_query.rda"))
+  save(MomIDCloseout_query, file = paste0(path_to_save, "MomIDCloseout_query.rda"))
   
 } else { print("No MNH23 queries found!") }
 
@@ -769,7 +769,7 @@ if (nrow(cod_df_long) > 0) {
     mutate(across(everything(), as.character))  # replaces mutate_all
   
   # Save the query results to an RDA file
-  save(CauseOfDeath_query, file = paste0(path_to_save, "/queries/CauseOfDeath_query.rda"))
+  save(CauseOfDeath_query, file = paste0(path_to_save, "CauseOfDeath_query.rda"))
   
 } else {
   print("No MNH37 queries found!")
@@ -940,7 +940,7 @@ if (nrow(query_results) > 0) {
     mutate_all(as.character())
   
   #export Mom ID not matched query 
-  save(MissingDeathDate_query, file = paste0(path_to_save,"/queries/MissingDeathDate_query.rda"))
+  save(MissingDeathDate_query, file = paste0(path_to_save,"MissingDeathDate_query.rda"))
   
 } else { print("No queries found!") }
 
@@ -1182,10 +1182,145 @@ if (nrow(all_deaths) > 0) {
         mutate(QueryID = paste0(Form, "_", VisitDate, "_",PregID, "_", "11"))
       
       # Export data
-      save(Mom_DeadThenAlive_query, file = paste0(path_to_save,"/queries/Mom_DeadThenAlive_query.rda"))
+      save(Mom_DeadThenAlive_query, file = paste0(path_to_save,"Mom_DeadThenAlive_query.rda"))
     }
   }
   
 } else {
   print("No valid maternal death records found.")
 }
+
+
+#*****************************************************************************
+#* Query: Death date entered, status not indicated ----
+#*****************************************************************************
+#* Logic:
+# 1. Loop through maternal forms where death can be recorded.
+#    - Identify cases with a valid, non-default maternal death date.
+#
+# 2. For each case, check the corresponding condition variable(s)
+#    that should indicate the mother’s death (e.g., visit outcome, vital status).
+#
+# 3. Flag records where a death date is entered,
+#    but the death status variable is either missing or not coded correctly.
+#    - These cases are internally inconsistent and should be queried.
+#*****************************************************************************
+# Initialize list for reverse mismatches
+
+form_names_dd <- c("mnh01", "mnh04", "mnh09", "mnh10", "mnh11", 
+                "mnh19", "mnh23", "mnh37")  # Add all forms here
+
+# Define dynamic conditions for each dataset (modify as needed)
+conditions_list_dd <- list(
+  mnh04 = list(
+    list(condition_var = "MAT_VISIT_MNH04", condition_value = 8, death_var = "DTHDAT"),
+    list(condition_var = "MAT_VITAL_MNH04", condition_value = 2, death_var = "DTHDAT"),
+    list(condition_var = "PRG_DTH_DSDECOD", condition_value = 1, death_var = "DTHDAT"),
+    list(condition_var = "PRG_DTH_DSDECOD", condition_value = 2, death_var = "DTHDAT"),
+    list(condition_var = "ACC_DDORRES", condition_value = 1, death_var = "DTHDAT"),
+    list(condition_var = "ACC_DDORRES", condition_value = 0, death_var = "DTHDAT")),
+  
+  mnh09 = list(
+    list(condition_var = "MAT_VISIT_MNH09", condition_value = 8, death_var = "MAT_DEATH_DTHDAT"),
+    list(condition_var = "MAT_VITAL_MNH09", condition_value = 2, death_var = "MAT_DEATH_DTHDAT")),
+  
+  
+  mnh10 = list(
+    list(condition_var = "MAT_VISIT_MNH10", condition_value = 8, death_var = "MAT_DEATH_DTHDAT"),
+    list(condition_var = "MAT_VITAL_MNH10", condition_value = 2, death_var = "MAT_DEATH_DTHDAT")),
+  
+  mnh12 = list(
+    list(condition_var = "MAT_VISIT_MNH12", condition_value = 8, death_var = "MAT_DEATH_DTHDAT"),
+    list(condition_var = "MAT_VITAL_MNH12", condition_value = 2, death_var = "MAT_DEATH_DTHDAT")),
+  
+  mnh19 = list(
+    list(condition_var = "VISIT_FAORRES", condition_value = 5, death_var = "DTHDAT"),
+    list(condition_var = "MAT_ARRIVAL_DSDECOD", condition_value = 2, death_var = "DTHDAT"),
+    list(condition_var = "ADMIT_DSTERM", condition_value = 3, death_var = "DTHDAT")),
+  
+  mnh20 = list(
+    list(condition_var = "ADMIT_DSTERM", condition_value = 3, death_var = "DTHDAT")),
+  
+  mnh23 = list(
+    list(condition_var = "CLOSE_DSDECOD", condition_value = 3, death_var = "DTHDAT")),
+  
+  mnh24 = list(
+    list(condition_var = "CLOSE_DSDECOD", condition_value = 3, death_var = "DTHDAT")),
+  
+  mnh37 = list(
+    list(condition_var = "VA_TYPE", condition_value = 1, death_var = "FINAL_MAT_DAT"),
+    list(condition_var = "VA_TYPE", condition_value = 2, death_var = "FINAL_INF_DAT"))
+)
+
+invalid_death_dates <- c(ymd("1907-07-07"), ymd("1905-05-05"), 
+                         ymd("2007-07-07"), ymd("1909-09-09")) 
+
+death_date_only <- data.frame()
+
+for (form_name in form_names_dd) {
+  
+  if (!exists(form_name, where = .GlobalEnv, inherits = FALSE)) next
+  form_data <- get(form_name)
+  if (is.null(form_data)) next
+  
+  conditions <- conditions_list_dd[[form_name]]
+  
+  for (cond in conditions) {
+    cond_var <- cond$condition_var
+    cond_value <- cond$condition_value
+    death_var <- cond$death_var
+    
+    # Make sure required columns are present
+    if (all(c(cond_var, death_var, "MOMID", "PREGID") %in% names(form_data))) {
+      
+      # Parse death dates
+      parsed_dates <- parse_date_time(form_data[[death_var]], 
+                                      orders = c("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d-%b-%y"), 
+                                      exact = FALSE)
+      parsed_dates <- ymd(parsed_dates)
+      
+      valid_mask <- !is.na(parsed_dates) & !(parsed_dates %in% invalid_death_dates)
+      valid_deaths <- form_data[valid_mask, ]
+      valid_deaths$parsed_death_date <- parsed_dates[valid_mask]
+      
+      # Now check where death condition is NOT correctly flagged
+      mismatched <- valid_deaths %>%
+        filter(!!sym(cond_var) != cond_value | is.na(!!sym(cond_var))) %>%
+        select(MOMID, PREGID, VisitDate = parsed_death_date) %>%
+        mutate(Form = toupper(form_name),
+               `Variable Name` = paste0 (death_var, "/",cond_var),
+               `Variable Value` = paste0("DeathDate: ", VisitDate, 
+                                         "; Status: ", as.character(valid_deaths[[cond_var]][match(PREGID, valid_deaths$PREGID)])),
+               FieldType = "Text",
+               EditType = "Death Date Entered, Status Not Indicated")
+      
+      death_date_only <- bind_rows(death_date_only, mismatched)
+    }
+  }
+}
+
+# Final formatting and export
+if (nrow(death_date_only) > 0) {
+  
+  death_date_only <- death_date_only %>%
+    mutate(VisitType = NA,
+           ScrnID = NA,
+           InfantID = NA) %>%
+    select(ScrnID, MomID = MOMID, PregID = PREGID, InfantID, VisitType, VisitDate, Form,
+           `Variable Name`, `Variable Value`, FieldType, EditType)
+  
+  # Add meta columns
+  Death_Date_query <- cbind(QueryID = NA,
+                           UploadDate = UploadDate,
+                           death_date_only,
+                           DateEditReported = format(Sys.time(), "%Y-%m-%d"))
+  
+  Death_Date_query <- Death_Date_query %>%
+    mutate_all(as.character) %>%
+    mutate(Form_Edit_Type = paste(Form, EditType, sep = "_"),
+           QueryID = paste0(Form, "_", PregID, "_", `Variable Name`, "_", "12"))  # EditType ID 12
+  
+  # Export query
+  save(Death_Date_query, file = paste0(path_to_save, "Death_Date_query.rda"))
+  
+} else {print ("No death date missing death indication")}
