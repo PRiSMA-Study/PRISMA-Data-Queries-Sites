@@ -561,7 +561,7 @@ if (dim(MaternalVisitType_query_to_export)[1] > 0){
   
   MaternalVisitType_query <- MaternalVisitType_query_to_export
   ## export variable checking query 
-  save(MaternalVisitType_query, file = paste0(path_to_save,"/MaternalVisitType_query.rda"))
+  save(MaternalVisitType_query, file = paste0(path_to_save,"MaternalVisitType_query.rda"))
   
 }
 
@@ -648,7 +648,7 @@ if (exists("duplicate_visit_dates_to_export")) {
   
   Duplicate_Visit_Dates_query <- Duplicate_Visit_Dates_query_to_export
   ## export variable checking query 
-  save(Duplicate_Visit_Dates_query, file = paste0(path_to_save,"/DuplicateVisitDates_query.rda"))
+  save(Duplicate_Visit_Dates_query, file = paste0(path_to_save,"DuplicateVisitDates_query.rda"))
   
 }
 
@@ -694,7 +694,7 @@ if (dim(visit_type_query_extra_tab)[1] >0){
   }
   
   ## export 
-  save(visit_type_query_extra_tab, file = paste0(path_to_save,"/visit_type_extra_tab.rda"))
+  save(visit_type_query_extra_tab, file = paste0(path_to_save,"visit_type_extra_tab.rda"))
   
 }
 
@@ -966,8 +966,8 @@ if (exists("GSED_visit_query_output") == TRUE) {
   
   GSED_visit_query <- GSED_visit_query_output_to_export
   ## export variable checking query 
-  save(GSED_visit_query, file = paste0(path_to_save,"/GSEDVisitType_query.rda"))
-  save(GSED_visit_query_extra, file = paste0(path_to_save,"/GSEDVisitType_query_extra.rda"))
+  save(GSED_visit_query, file = paste0(path_to_save,"GSEDVisitType_query.rda"))
+  save(GSED_visit_query_extra, file = paste0(path_to_save,"GSEDVisitType_query_extra.rda"))
   
 } else { 
   print(paste0("No GSED Query for ", site))
@@ -1044,7 +1044,7 @@ if (nrow(lab_all_df) > 0) {
   
   SpecimenDate_export_query$Form_Edit_Type <- paste(SpecimenDate_export_query$Form,"_", SpecimenDate_export_query$EditType)
   
-  save(SpecimenDate_export_query, file = paste0(path_to_save, "/SpecimenDate_export_query.rda"))
+  save(SpecimenDate_export_query, file = paste0(path_to_save, "SpecimenDate_export_query.rda"))
   
 } else {
   
@@ -1128,7 +1128,7 @@ if (nrow(lab_visit_df) > 0) {
   
   LabVisitDate_export_query$Form_Edit_Type <- paste(LabVisitDate_export_query$Form,"_", LabVisitDate_export_query$EditType)
   
-  save(LabVisitDate_export_query, file = paste0(path_to_save, "/LabVisitDate_export_query.rda"))
+  save(LabVisitDate_export_query, file = paste0(path_to_save, "LabVisitDate_export_query.rda"))
   
 } else {
   print("No Lab test date discrepancy found.")
@@ -1263,7 +1263,7 @@ if (nrow(all_anc_visits) > 0) {
   
   ANC_export_query$Form_Edit_Type <- paste(ANC_export_query$Form,"_",ANC_export_query$EditType)
   
-  save(ANC_export_query, file = paste0(path_to_save, "/ANC_export_query.rda"))
+  save(ANC_export_query, file = paste0(path_to_save, "ANC_export_query.rda"))
   
 } else {print ("No ANC Visit Date Discrepancy")}
 
@@ -1322,7 +1322,7 @@ if (nrow(all_pnc_visits) > 0) {
   # combine form/edit type var 
   PNC_export_query$Form_Edit_Type <- paste(PNC_export_query$Form,"_",PNC_export_query$EditType)
   
-  save(PNC_export_query, file = paste0(path_to_save, "/PNC_export_query.rda"))
+  save(PNC_export_query, file = paste0(path_to_save, "PNC_export_query.rda"))
   
 } else {print ("No PNC Visit Date Discrepancy")}
 
@@ -1751,7 +1751,7 @@ if (nrow(missing_visit_date_query) > 0) {
     ) %>%
     mutate(across(everything(), as.character))
   
-  save(VisitDateMissing_query, file = paste0(path_to_save, "/VisitDateMissing_query.rda"))
+  save(VisitDateMissing_query, file = paste0(path_to_save, "VisitDateMissing_query.rda"))
   cat("Saved query with", nrow(VisitDateMissing_query), "records\n")
 } else {
   print("No Invalid or Missing Visit Date")
