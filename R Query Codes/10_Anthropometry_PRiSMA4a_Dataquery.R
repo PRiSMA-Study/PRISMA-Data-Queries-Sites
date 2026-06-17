@@ -176,9 +176,9 @@ if (exists("mnh05")) {
     
     
     # Export variable checking query
-    save(MaternalAnthropometry_query, file = paste0(path_to_save, "/MaternalAnthropometry_query.rda"))
+    save(MaternalAnthropometry_query, file = paste0(path_to_save, "MaternalAnthropometry_query.rda"))
     
-    save(MaternalAnthro_comment_export, file = paste0(path_to_save, "/MaternalAnthro_comment_export.rda"))
+    save(MaternalAnthro_comment_export, file = paste0(path_to_save, "MaternalAnthro_comment_export.rda"))
     
     
     
@@ -358,7 +358,7 @@ if (exists("mnh13") & exists("mnh11")) {
     InfantAnthropometry_query_export <- InfantAnthropometry_query_export %>% mutate(QueryID = paste0(Form, "_", MomID, "_",`Variable Name`, "_", `Variable Value`, "_", "11")) %>% mutate_all(as.character)
     
     ##Save the infant weight comment as RDA file
-    save(InfWeight_comment_export, file = paste0(path_to_save, "/InfWeight_comment_export.rda"))
+    save(InfWeight_comment_export, file = paste0(path_to_save, "InfWeight_comment_export.rda"))
         
     print("Infant Weight Anthropometry Query ran and saved successfully")
     
@@ -496,7 +496,7 @@ if (exists("mnh13")) {
         select(QueryID, MOMID, PREGID, INFANTID, FORM, VARIABLE, EDIT_TYPE, LENGTH_DIFF, 
                starts_with("VISIT_"),starts_with("LENGTH_PERES"))
       
-      save(InfLength_comment_export, file = paste0(path_to_save, "/InfLength_comment_export.rda"))
+      save(InfLength_comment_export, file = paste0(path_to_save, "InfLength_comment_export.rda"))
       
       
       # Prepare data for export
@@ -694,7 +694,7 @@ if (exists("mnh09")== TRUE & exists("mnh13")== TRUE){
       
       
       InfantGrowth_query_comments <- left_join(InfantGrowth, QueryID, by = c("MomID", "PregID", "InfantID", "Visit_Type", "Measure"))
-      save(InfantGrowth_query_comments, file = paste0(path_to_save, "/InfantGrowth_query_comments.rda"))
+      save(InfantGrowth_query_comments, file = paste0(path_to_save, "InfantGrowth_query_comments.rda"))
       
       
       print ("Infant Growth Anthropometry Query ran and saved successfully") 
@@ -739,7 +739,7 @@ InfantAnthropometry_query <- bind_dataframes(dfs_list)
 #Export to query folder
 if (exists("InfantAnthropometry_query") && is.data.frame(InfantAnthropometry_query)) {
   
-  save(InfantAnthropometry_query, file = paste0(path_to_save, "/InfantAnthropometry_query.rda"))
+  save(InfantAnthropometry_query, file = paste0(path_to_save, "InfantAnthropometry_query.rda"))
   
   print("Infant Anthropometry Query ran and saved successfully")
   
@@ -1029,18 +1029,18 @@ if (exists("mnh36") == TRUE){
     print("No referral queries found. Binding only measurement queries.")
     
     BiliRuler_export_query <- Bili_query_export
-    save(BiliRuler_export_query, file = paste0(path_to_save, "/BiliRuler_export_query.rda"))
+    save(BiliRuler_export_query, file = paste0(path_to_save, "BiliRuler_export_query.rda"))
     
   } else if (exists("RefBili_query_export") && !exists("Bili_query_export") ) {
     print("No measurement queries found. Binding only referral queries.")
     
     BiliRuler_export_query <- RefBili_query_export
-    save(BiliRuler_export_query, file = paste0(path_to_save, "/BiliRuler_export_query.rda"))
+    save(BiliRuler_export_query, file = paste0(path_to_save, "BiliRuler_export_query.rda"))
     
   } else {
     # Both datasets are available; bind and convert column names to uppercase
     BiliRuler_export_query <- bind_rows(Bili_query_export, RefBili_query_export)
-    save(BiliRuler_export_query, file = paste0(path_to_save, "/BiliRuler_export_query.rda"))
+    save(BiliRuler_export_query, file = paste0(path_to_save, "BiliRuler_export_query.rda"))
   }
   
   # This else statement seems to be part of an outer if condition
