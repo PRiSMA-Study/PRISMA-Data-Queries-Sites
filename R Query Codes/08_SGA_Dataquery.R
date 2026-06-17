@@ -291,7 +291,7 @@ if (exists("SGA_query")== TRUE){
     mutate(QueryID = paste0(Form, "_", PregID, "_",InfantID, "_", `Variable Value`, "_", "11"))
   
   # Export data
-  save(SGA_query, file = paste0(path_to_save,"/queries/SGA_query.rda"))
+  save(SGA_query, file = paste0(path_to_save,"SGA_query.rda"))
   
 }
 
@@ -306,5 +306,5 @@ if (exists("sga_extra_tab")== TRUE){
     relocate(QueryID, .before = "MOMID")
   
   # Export data
-  save(sga_extra_tab, file = paste0(path_to_save,"/queries/sga_extra_tab.rda")) 
+  save(sga_extra_tab, file = paste0(path_to_save,"sga_extra_tab.rda")) 
 } 
