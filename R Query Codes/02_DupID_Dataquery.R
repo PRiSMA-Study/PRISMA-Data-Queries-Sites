@@ -1374,7 +1374,7 @@ duplicates_query <- VarNamesDuplicate
 duplicates_query <- duplicates_query %>% filter(!VisitType %in% c(13,14) & !(Form %in% c("MNH30", "MNH31", "MNH32")))
 
 #export
-save(duplicates_query, file = paste0(path_to_save,"/queries/duplicates_query.rda"))
+save(duplicates_query, file = paste0(path_to_save,"duplicates_query.rda"))
 
 #*****************************************************************************
 #* comparing mom id 
@@ -1439,7 +1439,7 @@ if (dim(MomidNotMatched)[1] >= 1){
     )
   
   #export Mom ID not matched query 
-  save(MomidNotMatched_query, file = paste0(path_to_save,"/queries/MomidNotMatched_query.rda"))
+  save(MomidNotMatched_query, file = paste0(path_to_save,"MomidNotMatched_query.rda"))
   
 }
 
@@ -1508,7 +1508,7 @@ if (dim(InfidNotMatched)[1] >= 1){
   
   
   #export Inf ID not matched query 
-  save(InfidNotMatched_query, file = paste0(path_to_save,"/queries/InfidNotMatched_query.rda"))
+  save(InfidNotMatched_query, file = paste0(path_to_save,"InfidNotMatched_query.rda"))
 }
 
 #*****************************************************************************
@@ -1657,6 +1657,6 @@ if (dim(remapp_query)[1] >= 1){
     mutate_all(as.character())
   
   #export Mom ID not matched query 
-  save(Remapp_query, file = paste0(path_to_save,"/queries/Remapp_query.rda"))
+  save(Remapp_query, file = paste0(path_to_save,"Remapp_query.rda"))
   
 } else {print ("No ReMAPP Aim 3 Query")}
