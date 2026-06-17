@@ -118,7 +118,7 @@ report_high_freq <- left_join(report_high_freq_bind, varNames_sheet, by = c("For
 ## Add recommendations
 table_high_freq <- report_high_freq %>% 
   mutate(
-    Recommendations = case_when(
+     Recommendations = case_when(
       EditType == "Extra Variable" ~ "Check variable naming and spelling or delete extra variable",
       EditType == "Missing Variable" ~ "Check variable naming and spelling or provide missing variable",
       EditType == "Duplicate ID" ~ "Investigate and resolve duplicated MomIDs for data integrity",
@@ -135,14 +135,20 @@ table_high_freq <- report_high_freq %>%
       EditType == "Inconsistencies Between LMP EDD and US EDD" ~ "Investigate discrepancies between LMP EDD and Ultrasound EDD",
       EditType == "Inconsistencies Between LMP GA and US GA" ~ "Investigate discrepancies between LMP GA and Ultrasound GA",
       EditType == "Visit Date is the same as EDD" ~ "Review and correct inconsistencies between visit dates and EDD",
-      EditType == "Provide Ineligibility Criteria" ~ "Provide eligibility criteria for excluded participants",
-      EditType == "Ineligibility Skip Pattern Error" ~ "Review and investigate OTHER exclusion criteria variable",
+      EditType == "Provide Ineligibility Criteria"  ~ "Provide eligibility criteria for excluded participants",
+      EditType == "Ineligibility Skip Pattern Error"  ~ "Review and investigate OTHER exclusion criteria variable",
+      EditType == grepl("Provide consent", EditType, ignore.case = TRUE)  ~ "Review and provide consent status in MNH00 of participants",
       EditType == "Specify Other Reason" ~ "Specify exclusion criteria for participants without identified reasons",
       EditType == "Size for gestational age either <0.5 or >99.5 percentile" ~ "Review birth weight and/or gestational age at birth",
       EditType == "Invalid visit following reported infant death" ~ "Review visit date where infant was reported `alive` following report of death",
       EditType == "Invalid visit following reported stillbirth" ~ "Review visit date where infant was reported `alive` following report of stillbirth",
-      EditType == "Invalid Visit Type" ~ "Review visit type extra tab and correct discrepancy",
-      EditType == "Participant GA >=48 weeks with no reported birth outcome (MNH04 or MNH09)" ~ "Confirm birth outcome with particpant or closeout" ),
+      EditType == "Invalid Visit Type" ~ "Review visit type extra tab and correct discrepancy" ,
+      EditType == "Participant GA >=48 weeks with no reported birth outcome (MNH04 or MNH09)" ~ "Confirm birth outcome with particpant or closeout",
+      EditType == "GSED Visit Type Error" ~ "Review gsed forms visit types and dates for accuracy",
+      grepl("Inf Length for Age Out of Range", EditType) | grepl("Inf Length for Weight Out of Range", EditType) | grepl("Inf Weight for Age Out of Range", EditType) ~ "Review Infant Growth tab and growth measures",
+      grepl("Length difference exceeds 0.5cm", EditType) | grepl("Decreasing infant length", EditType) ~ "Review infant length measurements between visits",
+      grepl("Confirm infant weight", EditType) | grepl("Confirm maternal weight", EditType) ~ "Review weight measurements between visits",
+      grepl("pressure|BP", EditType, ignore.case = TRUE) ~ "Review systolic and diastolic blood pressure measurements" ),
     `Form and Edit Type` = paste(Form, EditType, sep = " - "))
 
 table_high_freq <- ungroup(table_high_freq)
