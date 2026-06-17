@@ -1164,4 +1164,4 @@ OutRangeCheck_query <- out %>%
   ))
 
 ## Save output
-save(OutRangeCheck_query, file = paste0(path_to_save, "/queries/OutRangeCheck_query.rda"))
+save(OutRangeCheck_query, file = paste0(path_to_save, "OutRangeCheck_query.rda"))
