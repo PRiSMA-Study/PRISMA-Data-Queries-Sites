@@ -389,7 +389,7 @@ if (exists("mnh09")==TRUE){
     select(MOMID, PREGID, INFANTID, DOB, UPLOADDT, BILI_STARTDATE, BILI_ENDDATE, starts_with("UP"), starts_with("LW")) %>%
     distinct(INFANTID, PREGID, .keep_all = TRUE)
   
-  
+
   
   due_inf$DUE00 <- ifelse (due_inf$UPLOADDT > due_inf$UP00, TRUE, FALSE)
   due_inf$DUE01 <- ifelse (due_inf$UPLOADDT > due_inf$UP01, TRUE, FALSE)
@@ -398,7 +398,7 @@ if (exists("mnh09")==TRUE){
   due_inf$DUE26 <- ifelse (due_inf$UPLOADDT > due_inf$UP26, TRUE, FALSE)
   due_inf$DUE52 <- ifelse (due_inf$UPLOADDT > due_inf$UP52, TRUE, FALSE)
 
-  
+    if (exists("mnh36")==TRUE){
   due_inf$DUE00_BILI <- ifelse(
     due_inf$BILI_STARTDATE < due_inf$LW00 & due_inf$LW00 <= due_inf$BILI_ENDDATE & due_inf$INFANTID %in% bili_inf$INFANTID, 
     TRUE, FALSE)
@@ -408,7 +408,7 @@ if (exists("mnh09")==TRUE){
   due_inf$DUE04_BILI <- ifelse(
     due_inf$BILI_STARTDATE < due_inf$LW04 & due_inf$LW04 <= due_inf$BILI_ENDDATE & due_inf$INFANTID %in% bili_inf$INFANTID, 
     TRUE, FALSE)
-
+}
   
 }
 
@@ -1464,8 +1464,7 @@ if (nrow(all_anc_missing) > 0) {
     select ( QueryID, UploadDate, ScrnID, MomID, PregID, InfantID, VisitType, VisitDate, Form, 
              'Variable Name', 'Variable Value', FieldType, EditType, DateEditReported, Form_Edit_Type)
   
-
-  save(MatMissingForms_query, file = paste0(path_to_save,"MatMissingForms_query.rda"))
+  save(MatMissingForms_query, file = paste0(path_to_save, "MatMissingForms_query.rda")) 
   
   #create comments to specify missing forms
   missingEDD <- missing_forms_merged %>% left_join(EDD, by = c ("MOMID","PREGID" )) %>% 
@@ -1518,7 +1517,9 @@ if (nrow(all_anc_missing) > 0) {
     
   } 
   
-  save(MatMissingFormsQuery_comments, file = paste0(path_to_save,"MatMissingFormsQuery_comments.rda"))
+
+ save(MatMissingFormsQuery_comments, file = paste0(path_to_save, "MatMissingFormsQuery_comments.rda")) 
+
   print("All ANC Forms Combined")
   
   
@@ -1936,39 +1937,39 @@ if (exists("mnh26")) {
   
 } else {print ("MNH26 dataset not uploaded")}
 
-### For  Missing Forms
-if (exists("")) {
+### For MNH36 Missing Forms
+if (exists("mnh36")) {
   
   
-  # Loop  Missing Forms (TYPE-VISIT %in% c(7,8,9))
-  generate__report <- function(visit_type, due_df, suffix, due_var, due_bili) {
-    # Select relevant columns from  based on the visit type
-    PNC_36 <-  %>% filter(TYPE_VISIT == visit_type) %>% 
+  # Loop MNH36 Missing Forms (TYPE-VISIT %in% c(7,8,9))
+  generate_mnh36_report <- function(visit_type, due_df, suffix, due_var, due_bili) {
+    # Select relevant columns from MNH36 based on the visit type
+    PNC_36 <- mnh36 %>% filter(TYPE_VISIT == visit_type) %>% 
       mutate(VISIT_OBSSTDAT = ymd(parse_date_time(VISIT_OBSSTDAT, c("%d/%m/%Y","%d-%m-%Y","%Y-%m-%d", "%d-%b-%y")))) %>% 
-      select(MOMID, PREGID, INFANTID, INF_VISIT_, VISIT_OBSSTDAT)
+      select(MOMID, PREGID, INFANTID, INF_VISIT_MNH36, VISIT_OBSSTDAT)
     
     # Generate missing report by joining with the due dataframe
     result <- due_df %>%
       distinct(INFANTID, MOMID, PREGID, .keep_all = TRUE) %>%
       left_join(PNC_36, by = c("MOMID", "PREGID", "INFANTID")) %>%
       mutate(
-        Query = ifelse(is.na(INF_VISIT_) & !!sym(due_var) == TRUE & !!sym(due_bili) == TRUE, 
-                       paste0("Missing PNC", suffix, "  Form"),
+        Query = ifelse(is.na(INF_VISIT_MNH36) & !!sym(due_var) == TRUE & !!sym(due_bili) == TRUE, 
+                       paste0("Missing PNC", suffix, " MNH36 Form"),
                        
-                       ifelse(INF_VISIT_ %in% c(1, 2, 3, 4, 5, 6, 7, 8, 88), FALSE,
+                       ifelse(INF_VISIT_MNH36 %in% c(1, 2, 3, 4, 5, 6, 7, 8, 88), FALSE,
                               
                               ifelse(!!sym(due_var) == FALSE | !!sym(due_bili) == FALSE, "Not Due",
                                      
-                                     ifelse(!(INF_VISIT_ %in% c(1:8, 88)) & !is.na(INF_VISIT_) & !!sym(due_var) == TRUE & !!sym(due_bili) == TRUE, 
-                                            paste0("Invalid Data Entry for  PNC", suffix),   
+                                     ifelse(!(INF_VISIT_MNH36 %in% c(1:8, 88)) & !is.na(INF_VISIT_MNH36) & !!sym(due_var) == TRUE & !!sym(due_bili) == TRUE, 
+                                            paste0("Invalid Data Entry for MNH36 PNC", suffix),   
                                             
                                             "Not Applicable")))),
         
-        Variable_Value = INF_VISIT_,
-        Form = "",
+        Variable_Value = INF_VISIT_MNH36,
+        Form = "MNH36",
         VisitDate = VISIT_OBSSTDAT,
         VisitType = as.character(visit_type), 
-        Varname = "INF_VISIT_"
+        Varname = "INF_VISIT_MNH36"
       ) %>%
       filter(!(Query %in% c(FALSE, "Not Due"))) %>%
       select(MOMID, PREGID, INFANTID, VisitDate, VisitType, UPLOADDT, DOB, Varname, Variable_Value, Form, Query)
@@ -1985,19 +1986,19 @@ if (exists("")) {
   
   # Generate the missing reports using lapply
   missing_reports <- lapply(visit_types, function(v) {
-    generate__report(v$visit_type, v$due_df, v$suffix, v$due_var, v$due_bili)
+    generate_mnh36_report(v$visit_type, v$due_df, v$suffix, v$due_var, v$due_bili)
   })
   
   # Combine all reports into a single dataframe
   Missing_36_PNC_raw <- do.call(rbind, missing_reports)
   
   # Filter out specific INFANTIDs for VisitType == 9
-  PNC06_BILI_IDs <-  %>% filter(INF_VISIT_ %in% c(1, 2) & TYPE_VISIT == 10) %>% pull(INFANTID)
+  PNC06_BILI_IDs <- mnh36 %>% filter(INF_VISIT_MNH36 %in% c(1, 2) & TYPE_VISIT == 10) %>% pull(INFANTID)
   
   Missing_36_PNC <- Missing_36_PNC_raw %>% filter(!(INFANTID %in% PNC06_BILI_IDs & VisitType == 9))
   
 } else {
-  print(" dataset not uploaded")
+  print("MNH36 dataset not uploaded")
 }
 
 ##Bind all PNC forms ----
@@ -2089,9 +2090,10 @@ if (nrow(all_pnc_missing) > 0) {
     )  %>%
     select ( QueryID, UploadDate, ScrnID, MomID, PregID, InfantID, VisitType, VisitDate, Form, 
              'Variable Name', 'Variable Value', FieldType, EditType, DateEditReported, Form_Edit_Type)
-  
 
-  save(InfMissingForms_query, file = paste0(path_to_save,"InfMissingForms_query.rda"))
+  save(InfMissingForms_query, file = paste0(path_to_save, "InfMissingForms_query.rda")) 
+
+  
   #create comments to specify missing forms
   
   InfMissingFormsQuery_comments <- missing_pnc_merged %>%
@@ -2137,10 +2139,9 @@ if (nrow(all_pnc_missing) > 0) {
     
   } else {InfMissingFormsQuery_comments <- InfMissingFormsQuery_comments %>% mutate (GW_Comment = NA)}
   
-  
 
-  save(InfMissingFormsQuery_comments, file = paste0(path_to_save,"InfMissingFormsQuery_comments.rda"))
-  
+  save(InfMissingFormsQuery_comments, file = paste0(path_to_save, "InfMissingFormsQuery_comments.rda")) 
+
   print("PNC Missing Forms Query ran successfully")
   
 } else {
@@ -2331,7 +2332,7 @@ if (!site %in% c("Zambia")) {
       select ( QueryID, UploadDate, ScrnID, MomID, PregID, InfantID, VisitType, VisitDate, Form, 
                'Variable Name', 'Variable Value', FieldType, EditType, DateEditReported, Form_Edit_Type)
     
-save(G3_MissingForms_query, file = paste0(path_to_save,"G3_MissingForms_query.rda"))
+    save(G3_MissingForms_query, file = paste0(path_to_save, "G3_MissingForms_query.rda")) 
 }
 
 }
@@ -2583,6 +2584,6 @@ if (nrow(all_remind_missing) > 0) {
              'Variable Name', 'Variable Value', FieldType, EditType, DateEditReported, Form_Edit_Type) %>%
     mutate_all(as.character())
   
-  save(REMIND_MissingForms_query, file = paste0(path_to_save,"REMIND_MissingForms_query.rda"))
+  save(REMIND_MissingForms_query, file = paste0(path_to_save, "REMIND_MissingForms_query.rda")) 
   
 } else { print("No REMIND Missing Forms")}
